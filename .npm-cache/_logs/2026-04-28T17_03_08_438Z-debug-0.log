@@ -1,0 +1,37 @@
+0 verbose cli D:\Nodejs\node.exe D:\Nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@10.9.2
+2 info using node@v22.16.0
+3 silly config load:file:D:\Nodejs\node_modules\npm\npmrc
+4 silly config load:file:C:\Users\韩欣星\AppData\Local\Microsoft\TypeScript\5.9\.npmrc
+5 silly config load:file:C:\Users\韩欣星\.npmrc
+6 silly config load:file:D:\Nodejs\node_global\etc\npmrc
+7 verbose title npm install types-registry@latest
+8 verbose argv "install" "--ignore-scripts" "types-registry@latest"
+9 verbose logfile logs-max:10 dir:D:\OpenClawIAGS\.npm-cache\_logs\2026-04-28T17_03_08_438Z-
+10 verbose logfile D:\OpenClawIAGS\.npm-cache\_logs\2026-04-28T17_03_08_438Z-debug-0.log
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:4345298944 maxSize:1086324736 maxEntrySize:543162368
+13 silly packumentCache corgi:https://registry.npmjs.org/types-registry cache-miss
+14 http fetch GET https://registry.npmjs.org/types-registry attempt 1 failed with ECONNRESET
+15 http fetch GET 200 https://registry.npmjs.org/types-registry 15585ms attempt #2 (cache miss)
+16 silly packumentCache corgi:https://registry.npmjs.org/types-registry set size:undefined disposed:false
+17 silly idealTree buildDeps
+18 silly fetch manifest types-registry@0.1.767
+19 silly packumentCache full:https://registry.npmjs.org/types-registry cache-miss
+20 http fetch GET 200 https://registry.npmjs.org/types-registry 123ms (cache miss)
+21 silly packumentCache full:https://registry.npmjs.org/types-registry set size:undefined disposed:false
+22 silly placeDep ROOT types-registry@0.1.767 OK for:  want: 0.1.767
+23 silly reify moves {}
+24 silly audit bulk request { 'types-registry': [ '0.1.767' ] }
+25 http cache types-registry@https://registry.npmjs.org/types-registry/-/types-registry-0.1.767.tgz 0ms (cache hit)
+26 silly tarball no local data for types-registry@https://registry.npmjs.org/types-registry/-/types-registry-0.1.767.tgz. Extracting by manifest.
+27 http fetch POST 200 https://registry.npmjs.org/-/npm/v1/security/advisories/bulk 195ms
+28 silly audit report {}
+29 http fetch GET 200 https://registry.npmjs.org/types-registry/-/types-registry-0.1.767.tgz 1105ms (cache miss)
+30 silly ADD node_modules/types-registry
+31 verbose cwd C:\Users\韩欣星\AppData\Local\Microsoft\TypeScript\5.9
+32 verbose os Windows_NT 10.0.22631
+33 verbose node v22.16.0
+34 verbose npm  v10.9.2
+35 verbose exit 0
+36 info ok

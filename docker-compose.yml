@@ -1,0 +1,64 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: openclaw_grading
+      MYSQL_USER: openclaw
+      MYSQL_PASSWORD: openclaw
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3307:3306"
+    command: --default-authentication-plugin=caching_sha2_password
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  java-backend:
+    build:
+      context: ./java-backend
+      dockerfile: Dockerfile
+    working_dir: /app
+    command: bash -c "mvn clean package -DskipTests && java -jar target/openclaw-intelligent-grading-1.0.0.jar"
+    volumes:
+      - ./java-backend:/app
+      - maven_repo:/root/.m2
+    environment:
+      - MYSQL_HOST=mysql
+      - MYSQL_PORT=3306
+      - MYSQL_DATABASE=openclaw_grading
+      - MYSQL_USERNAME=openclaw
+      - MYSQL_PASSWORD=openclaw
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USERNAME=guest
+      - RABBITMQ_PASSWORD=guest
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+    ports:
+      - "8080:8080"
+    # Linux 下 Docker 默认不支持 host.docker.internal，显式添加
+    # 用于访问宿主机上的 SSH 隧道（localhost:18789 → 远程 OpenClaw）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  mysql_data:
+  maven_repo:
+

@@ -1,0 +1,12 @@
+0 verbose cli D:\Nodejs\node.exe D:\Nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@10.9.2
+2 info using node@v22.16.0
+3 silly config load:file:D:\Nodejs\node_modules\npm\npmrc
+4 silly config load:file:D:\OpenClawIAGS\frontend\.npmrc
+5 silly config load:file:C:\Users\韩欣星\.npmrc
+6 silly config load:file:D:\Nodejs\node_global\etc\npmrc
+7 verbose title npm run dev
+8 verbose argv "run" "dev"
+9 verbose logfile logs-max:10 dir:D:\OpenClawIAGS\.npm-cache\_logs\2026-04-28T14_35_43_253Z-
+10 verbose logfile D:\OpenClawIAGS\.npm-cache\_logs\2026-04-28T14_35_43_253Z-debug-0.log
+11 silly logfile done cleaning log files

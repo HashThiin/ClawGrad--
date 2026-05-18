@@ -1,0 +1,99 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1
+
+spring:
+  application:
+    name: openclaw-intelligent-grading
+  
+  # Database Configuration
+  datasource:
+    url: jdbc:mysql://localhost:3306/openclaw_grading?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+  
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+  
+  # Redis Configuration
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: 
+      database: 0
+      timeout: 5000ms
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+  
+  # RabbitMQ Configuration
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    listener:
+      simple:
+        concurrency: 5
+        max-concurrency: 10
+
+# OpenClaw Gateway Configuration
+openclaw:
+  gateway:
+    # OpenClaw 提供 OpenAI 兼容 /v1/chat/completions
+    # 服务端已配置 iptables 转发 18789 → 127.0.0.1:18789
+    url: http://47.122.119.189:18789
+    token: 20de693491980119110e7d5c2543419cd1629c770211296af32498cba736c8ed
+    timeout: 60000
+    enabled: true
+    # 默认调用的模型（来自 OpenClaw 配置中的 dashscope 提供商）
+    model: dashscope/glm-5
+    callback-url: http://localhost:8080/api/v1/callback/grading
+  webhook:
+    path: /webhook/openclaw
+    secret: your-webhook-secret
+
+# Grading Configuration
+grading:
+  code:
+    sandbox-enabled: true
+    sandbox-timeout: 5000
+    max-memory: 256m
+  async:
+    enabled: true
+    thread-pool-size: 10
+    queue-capacity: 1000
+
+# Logging
+logging:
+  level:
+    com.openclaw: INFO
+    org.springframework.web: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
