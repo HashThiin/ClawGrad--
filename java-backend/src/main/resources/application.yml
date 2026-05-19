@@ -66,30 +66,111 @@ openclaw:
     # OpenClaw 提供 OpenAI 兼容 /v1/chat/completions
     # Gateway 运行在云服务器
     url: http://47.122.119.189:18789
-    token: 20de693491980119110e7d5c2543419cd1629c770211296af32498cba736c8ed
+    token: 65efb3eaba41095efcf235033bcaf3e44d8e094c38c76c3bed1c4e74fe478379
     timeout: 60000
     enabled: true
-    # 默认调用的模型（来自 OpenClaw 配置中的 dashscope 提供商）
-    model: dashscope/qwen3.5-plus
+    # 默认调用的模型（来自 OpenClaw 配置中的 bailian-token-plan 提供商）
+    model: bailian-token-plan/qwen3.6-plus
     callback-url: http://localhost:8080/api/v1/callback/grading
-    # OpenClaw Agent ID
-    agent-id: main
+    # 注意：不再需要 agent-id，按 OpenClaw 推荐仅用 Authorization + model 字段切换模型
   webhook:
     path: /webhook/openclaw
     secret: your-webhook-secret
   # 可切换的多模型清单（后端 GET /grading/models 返回这个列表）
-  default-model: dashscope/qwen3.5-plus
+  default-model: bailian-token-plan/qwen3.6-plus
   models:
-    - id: dashscope/qwen3.5-plus
-      name: 通义 Qwen3.5 Plus
-      provider: dashscope
+    # 多模态模型（支持图片批改）
+    - id: bailian-token-plan/qwen3.6-plus
+      name: Qwen3.6 Plus
+      provider: bailian-token-plan
       supports-vision: true
-      description: 支持文本+图片多模态，适合作业批改
-    - id: dashscope/kimi-k2.5
+      description: "⭐ 默认模型，超大上下文(977K ，适合长作业、多页作业、手写作业拍照"
+      context-window: 977000
+      max-output: 65536
+      reasoning: true
+      recommended: true
+    - id: bailian-token-plan/qwen3.6-flash
+      name: Qwen3.6 Flash
+      provider: bailian-token-plan
+      supports-vision: true
+      description: "快速响应模型，超大上下文(977K)，适合需要快速反馈的作业批改"
+      context-window: 977000
+      max-output: 65536
+      reasoning: true
+      recommended: false
+    - id: bailian-token-plan/kimi-k2.6
+      name: Kimi K2.6
+      provider: bailian-token-plan
+      supports-vision: true
+      description: "Moonshot 最新模型，256K上下文，适合需要详细反馈、作文批改的场景"
+      context-window: 262144
+      max-output: 262144
+      reasoning: true
+      recommended: false
+    - id: bailian-token-plan/kimi-k2.5
       name: Kimi K2.5
-      provider: dashscope
+      provider: bailian-token-plan
       supports-vision: true
-      description: Moonshot Kimi 多模态模型，支持图片理解
+      description: "Moonshot Kimi 多模态模型，256K上下文，支持图片理解"
+      context-window: 262144
+      max-output: 262144
+      reasoning: true
+      recommended: false
+    # 纯文本模型（不支持图片）
+    - id: bailian-token-plan/deepseek-v4-pro
+      name: DeepSeek V4 Pro
+      provider: bailian-token-plan
+      supports-vision: false
+      description: "强推理能力，160K上下文，适合逻辑推理题、数学题、复杂分析题"
+      context-window: 163840
+      max-output: 65536
+      reasoning: true
+      recommended: false
+    - id: bailian-token-plan/deepseek-v4-flash
+      name: DeepSeek V4 Flash
+      provider: bailian-token-plan
+      supports-vision: false
+      description: "快速推理模型，160K上下文，适合一般文本批改"
+      context-window: 163840
+      max-output: 65536
+      reasoning: true
+      recommended: false
+    - id: bailian-token-plan/deepseek-v3.2
+      name: DeepSeek V3.2
+      provider: bailian-token-plan
+      supports-vision: false
+      description: "经典文本模型，160K上下文，适合基础题目批改"
+      context-window: 163840
+      max-output: 65536
+      reasoning: true
+      recommended: false
+    - id: bailian-token-plan/glm-5.1
+      name: GLM-5.1
+      provider: bailian-token-plan
+      supports-vision: false
+      description: "智谱最新模型，198K上下文，均衡性能与质量"
+      context-window: 202752
+      max-output: 16384
+      reasoning: true
+      recommended: false
+    - id: bailian-token-plan/glm-5
+      name: GLM-5
+      provider: bailian-token-plan
+      supports-vision: false
+      description: "智谱经典模型，198K上下文，适合一般文本批改"
+      context-window: 202752
+      max-output: 16384
+      reasoning: true
+      recommended: false
+    - id: bailian-token-plan/MiniMax-M2.5
+      name: MiniMax-M2.5
+      provider: bailian-token-plan
+      supports-vision: false
+      description: "通用文本模型，192K上下文，适合一般题目批改"
+      context-window: 196608
+      max-output: 131072
+      reasoning: true
+      recommended: false
 
 # Grading Configuration
 grading:

@@ -2,6 +2,7 @@ package com.openclaw.grading.pipeline;
 
 import com.openclaw.grading.model.dto.AssignmentGradingRequest;
 import com.openclaw.grading.model.dto.AssignmentGradingResult;
+import com.openclaw.grading.model.dto.OrganizedHomework;
 import lombok.Data;
 
 import java.time.Instant;
@@ -39,6 +40,9 @@ public class GradingContext {
 
     /** 多模态消息内容片段（OpenAI 兼容格式） */
     private List<Object> userContentParts;
+
+    /** Organize 阶段产物：结构化作业（题目/答案/科目） */
+    private OrganizedHomework organizedHomework;
 
     /** 模型原始返回 */
     private String aiRawText;

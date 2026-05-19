@@ -190,6 +190,108 @@ GET /api/v1/webhook/openclaw/health
 3. Java 应用异步处理作业批改
 4. 批改完成后通过 OpenClaw Gateway API 推送结果给学生
 
+## 🤖 模型调用方案
+
+### 调用原理
+
+系统通过 **OpenClaw Gateway** 调用 AI 模型，采用 OpenAI 兼容的 `/v1/chat/completions` 接口。
+
+```
+前端选择模型 → 后端验证模型ID → 构建请求体 → POST /v1/chat/completions → 解析响应
+```
+
+### 请求格式
+
+```bash
+POST http://<gateway-host>:18789/v1/chat/completions
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "model": "bailian-token-plan/qwen3.6-plus",
+  "messages": [
+    {"role": "system", "content": "系统提示词"},
+    {"role": "user", "content": "用户消息"}
+  ]
+}
+```
+
+**多模态请求（图片批改）：**
+
+```json
+{
+  "model": "bailian-token-plan/qwen3.6-plus",
+  "messages": [
+    {"role": "system", "content": "系统提示词"},
+    {
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "请批改以下作业图片"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}}
+      ]
+    }
+  ]
+}
+```
+
+### 模型切换机制
+
+- **请求头**：仅需 `Authorization: Bearer <token>`
+- **模型切换**：通过请求体中的 `model` 字段指定，无需 `x-openclaw-agent-id` 头
+- **模型ID格式**：`<提供商>/<模型名>`，如 `bailian-token-plan/qwen3.6-plus`
+
+### 可用模型清单
+
+| 模型ID | 展示名 | 多模态 | 上下文 | 最大输出 | 描述 |
+|----------|--------|--------|--------|----------|------|
+| `bailian-token-plan/qwen3.6-plus` | Qwen3.6 Plus | ✅ | 977K | 64K | ⭐ 默认模型，超大上下文，适合长作业、多页作业、手写作业拍照 |
+| `bailian-token-plan/qwen3.6-flash` | Qwen3.6 Flash | ✅ | 977K | 64K | 快速响应模型，适合需要快速反馈的作业批改 |
+| `bailian-token-plan/kimi-k2.6` | Kimi K2.6 | ✅ | 256K | 256K | Moonshot 最新模型，适合详细反馈、作文批改 |
+| `bailian-token-plan/kimi-k2.5` | Kimi K2.5 | ✅ | 256K | 256K | Moonshot Kimi 多模态模型，支持图片理解 |
+| `bailian-token-plan/deepseek-v4-pro` | DeepSeek V4 Pro | ❌ | 160K | 64K | 强推理能力，适合逻辑推理、数学题、复杂分析 |
+| `bailian-token-plan/deepseek-v4-flash` | DeepSeek V4 Flash | ❌ | 160K | 64K | 快速推理模型，适合一般文本批改 |
+| `bailian-token-plan/deepseek-v3.2` | DeepSeek V3.2 | ❌ | 160K | 64K | 经典文本模型，适合基础题目批改 |
+| `bailian-token-plan/glm-5.1` | GLM-5.1 | ❌ | 198K | 16K | 智谱最新模型，均衡性能与质量 |
+| `bailian-token-plan/glm-5` | GLM-5 | ❌ | 198K | 16K | 智谱经典模型，适合一般文本批改 |
+| `bailian-token-plan/MiniMax-M2.5` | MiniMax-M2.5 | ❌ | 192K | 128K | 通用文本模型，适合一般题目批改 |
+
+> 多模态模型支持 `text + image` 输入，纯文本模型仅支持 `text` 输入。前端会根据 `supportsVision` 字段自动显示/隐藏图片上传区域。
+
+### 核心代码实现
+
+**OpenClawClientService.java** —— 负责与 Gateway 通信：
+
+```java
+// 仅需 Authorization 头，通过 model 字段切换模型
+WebClient.builder()
+    .baseUrl("http://47.122.119.189:18789")
+    .defaultHeader("Authorization", "Bearer " + token)
+    .build();
+
+// 请求体中指定模型
+Map<String, Object> body = Map.of(
+    "model", "bailian-token-plan/qwen3.6-plus",  // ← 此处切换模型
+    "messages", messages
+);
+```
+
+**模型解析流程**（PreparationStage.java）：
+
+```java
+// 1. 获取前端选择的模型ID
+String requested = ctx.getModelId();
+
+// 2. 验证模型在配置清单中存在，不存在则报错
+ModelInfo model = modelCatalog.resolve(requested);
+
+// 3. 多模态降级：有图片但模型不支持 vision → 降级为纯文本
+if (ctx.isMultimodal() && !model.isSupportsVision()) {
+    ctx.setMultimodal(false);
+}
+```
+
+---
+
 ## 🎯 核心功能
 
 ### ✅ 已实现

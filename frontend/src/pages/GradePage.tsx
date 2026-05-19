@@ -154,30 +154,25 @@ const GradePage = () => {
               />
             </Form.Item>
 
-            {/* 图片上传 */}
-            <Form.Item
-              label={
-                <Space>
-                  <PictureOutlined />
-                  作业图片（可选，多模态批改）
-                </Space>
-              }
-              extra={
-                selectedModel && !selectedModel.supportsVision ? (
-                  <Text type="warning">
-                    当前模型不支持图片，若需上传图片请切换到带「多模态」标签的模型
-                  </Text>
-                ) : (
+            {/* 图片上传 - 仅在选择多模态模型时显示 */}
+            {selectedModel?.supportsVision && (
+              <Form.Item
+                label={
+                  <Space>
+                    <PictureOutlined />
+                    作业图片（可选，多模态批改）
+                  </Space>
+                }
+                extra={
                   <Text type="secondary">支持 PNG / JPG / WEBP，单张不超过 20MB，最多 5 张</Text>
-                )
-              }
-            >
-              <Dragger
-                fileList={fileList}
-                multiple
-                accept="image/*"
-                maxCount={5}
-                beforeUpload={() => false}
+                }
+              >
+                <Dragger
+                  fileList={fileList}
+                  multiple
+                  accept="image/*"
+                  maxCount={5}
+                  beforeUpload={() => false}
                 onChange={({ fileList: fl }) => setFileList(fl)}
                 onRemove={(file) =>
                   setFileList((prev) => prev.filter((f) => f.uid !== file.uid))
@@ -192,6 +187,7 @@ const GradePage = () => {
                 </p>
               </Dragger>
             </Form.Item>
+            )}
 
             <Form.Item>
               <Space>

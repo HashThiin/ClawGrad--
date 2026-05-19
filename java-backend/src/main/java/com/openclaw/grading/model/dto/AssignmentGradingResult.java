@@ -58,6 +58,16 @@ public class AssignmentGradingResult {
      * 详细分析步骤
      */
     private List<String> reasoningSteps;
+
+    /**
+     * 逐题批改明细（多题作业时使用；单题可为空）
+     */
+    private List<ItemGradingResult> items;
+
+    /**
+     * 总体总结（多题下的综合分析）
+     */
+    private String overallSummary;
     
     @Data
     public static class ErrorPoint {

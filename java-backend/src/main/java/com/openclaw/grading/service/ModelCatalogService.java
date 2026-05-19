@@ -85,6 +85,10 @@ public class ModelCatalogService {
         private boolean supportsVision;
         private String description;
         private boolean isDefault;
+        private boolean recommended;
+        private Long contextWindow;
+        private Long maxOutput;
+        private Boolean reasoning;
 
         public static ModelInfo from(ModelEntry e, boolean isDefault) {
             ModelInfo m = new ModelInfo();
@@ -94,6 +98,10 @@ public class ModelCatalogService {
             m.setSupportsVision(e.isSupportsVision());
             m.setDescription(e.getDescription());
             m.setDefault(isDefault);
+            m.setRecommended(e.isRecommended());
+            m.setContextWindow(e.getContextWindow());
+            m.setMaxOutput(e.getMaxOutput());
+            m.setReasoning(e.getReasoning());
             return m;
         }
     }

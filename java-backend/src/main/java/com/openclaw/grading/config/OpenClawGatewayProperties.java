@@ -38,12 +38,7 @@ public class OpenClawGatewayProperties {
     private String callbackUrl = "http://localhost:8080/api/v1/callback/grading";
 
     /**
-     * 默认调用的模型id（与 OpenClaw 路由匹配，例如 dashscope/glm-5）
+     * 默认调用的模型id（完整格式：bailian-token-plan/模型名）
      */
-    private String model = "dashscope/glm-5";
-
-    /**
-     * OpenClaw Agent ID（用于路由和会话管理）
-     */
-    private String agentId = "main";
+    private String model = "bailian-token-plan/qwen3.6-plus";
 }

@@ -46,17 +46,23 @@ public class GradingPipeline {
         log.info("[Pipeline] start taskId={}, model={}, multimodal={}",
                 ctx.getTaskId(), ctx.getModelId(), ctx.isMultimodal());
 
+        // upload 阶段在 Controller 已完成（接收文件 + 创建任务），这里直接标记为 completed
+        taskStore.stageDone(ctx.getTaskId(), "upload", 0L);
+
         for (GradingStage stage : stages) {
             Instant t0 = Instant.now();
+            taskStore.stageStart(ctx.getTaskId(), stage.name());
             try {
                 stage.execute(ctx);
                 long cost = Duration.between(t0, Instant.now()).toMillis();
                 ctx.getStageTimings().put(stage.name(), cost);
+                taskStore.stageDone(ctx.getTaskId(), stage.name(), cost);
                 log.info("[Pipeline] stage={} done in {}ms (taskId={})",
                         stage.name(), cost, ctx.getTaskId());
             } catch (Exception e) {
                 long cost = Duration.between(t0, Instant.now()).toMillis();
                 ctx.getStageTimings().put(stage.name(), cost);
+                taskStore.stageFailed(ctx.getTaskId(), stage.name(), cost);
                 String msg = "[" + stage.name() + "] " + e.getMessage();
                 log.error("[Pipeline] stage={} FAILED in {}ms (taskId={}): {}",
                         stage.name(), cost, ctx.getTaskId(), msg, e);

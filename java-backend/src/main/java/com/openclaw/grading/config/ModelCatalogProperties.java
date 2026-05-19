@@ -34,5 +34,13 @@ public class ModelCatalogProperties {
         private boolean supportsVision = false;
         /** 描述 */
         private String description;
+        /** 是否推荐（前端显示推荐标签） */
+        private boolean recommended = false;
+        /** 上下文窗口大小（tokens） */
+        private Long contextWindow;
+        /** 最大输出长度（tokens） */
+        private Long maxOutput;
+        /** 是否具有推理能力 */
+        private Boolean reasoning;
     }
 }

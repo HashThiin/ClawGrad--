@@ -148,23 +148,48 @@ public class AssignmentGradingController {
         }
 
         if ("COMPLETED".equals(task.getStatus())) {
-            return ResponseEntity.ok(Map.of(
-                    "taskId", taskId,
-                    "status", "COMPLETED",
-                    "result", task.getResult()
-            ));
+            java.util.Map<String, Object> body = new java.util.LinkedHashMap<>();
+            body.put("taskId", taskId);
+            body.put("status", "COMPLETED");
+            body.put("result", task.getResult());
+            if (task.getOrganizedHomework() != null) {
+                body.put("organizedHomework", task.getOrganizedHomework());
+            }
+            if (task.getStages() != null) {
+                body.put("stages", task.getStages());
+            }
+            if (task.getCurrentStage() != null) {
+                body.put("currentStage", task.getCurrentStage());
+            }
+            return ResponseEntity.ok(body);
         } else if ("FAILED".equals(task.getStatus())) {
-            return ResponseEntity.ok(Map.of(
-                    "taskId", taskId,
-                    "status", "FAILED",
-                    "error", task.getError()
-            ));
+            java.util.Map<String, Object> body = new java.util.LinkedHashMap<>();
+            body.put("taskId", taskId);
+            body.put("status", "FAILED");
+            body.put("error", task.getError());
+            if (task.getStages() != null) {
+                body.put("stages", task.getStages());
+            }
+            if (task.getCurrentStage() != null) {
+                body.put("currentStage", task.getCurrentStage());
+            }
+            return ResponseEntity.ok(body);
         } else {
-            return ResponseEntity.ok(Map.of(
-                    "taskId", taskId,
-                    "status", "PROCESSING",
-                    "message", "批改进行中，请稍后再试"
-            ));
+            java.util.Map<String, Object> body = new java.util.LinkedHashMap<>();
+            body.put("taskId", taskId);
+            body.put("status", "PROCESSING");
+            body.put("message", "批改进行中，请稍后再试");
+            if (task.getStages() != null) {
+                body.put("stages", task.getStages());
+            }
+            if (task.getCurrentStage() != null) {
+                body.put("currentStage", task.getCurrentStage());
+            }
+            // PROCESSING 阶段也可能已经完成 organize，提前返回供前端展示
+            if (task.getOrganizedHomework() != null) {
+                body.put("organizedHomework", task.getOrganizedHomework());
+            }
+            return ResponseEntity.ok(body);
         }
     }
 }

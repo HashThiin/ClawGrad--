@@ -25,6 +25,55 @@ export interface AIGradingResult {
   suggestions: string[]
   knowledgePoints: KnowledgePoint[]
   reasoningSteps: string[]
+  items?: ItemGradingResult[]
+  overallSummary?: string
+}
+
+export interface ItemGradingResult {
+  index: number
+  question?: string
+  answer?: string
+  score: number
+  maxScore: number
+  feedback?: string
+  errors?: ErrorPoint[]
+  correctness?: 'correct' | 'partial' | 'wrong' | string
+}
+
+export interface HomeworkItem {
+  index: number
+  question?: string
+  answer?: string
+  maxScore?: number
+}
+
+export interface OrganizedHomework {
+  subject?: string
+  question?: string
+  answer?: string
+  maxScore?: number
+  fromImage: boolean
+  remark?: string
+  items?: HomeworkItem[]
+  totalMaxScore?: number
+}
+
+export interface StageProgress {
+  name: string
+  /** pending / running / completed / failed */
+  status: 'pending' | 'running' | 'completed' | 'failed' | string
+  duration?: number
+}
+
+export interface TaskResultResponse {
+  taskId: string
+  status: 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'NOT_FOUND'
+  result?: AIGradingResult
+  organizedHomework?: OrganizedHomework
+  stages?: StageProgress[]
+  currentStage?: string
+  error?: string
+  message?: string
 }
 
 export interface ErrorPoint {
@@ -45,8 +94,12 @@ export interface ModelInfo {
   name: string
   provider: string
   supportsVision: boolean
-  description?: string
+  description: string
   default: boolean
+  recommended: boolean
+  contextWindow?: number
+  maxOutput?: number
+  reasoning?: boolean
 }
 
 // 获取可用模型列表

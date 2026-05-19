@@ -2,12 +2,18 @@ package com.openclaw.grading.pipeline.stage;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openclaw.grading.model.dto.AssignmentGradingResult;
+import com.openclaw.grading.model.dto.HomeworkItem;
+import com.openclaw.grading.model.dto.ItemGradingResult;
+import com.openclaw.grading.model.dto.OrganizedHomework;
 import com.openclaw.grading.pipeline.GradingContext;
 import com.openclaw.grading.pipeline.GradingStage;
 import com.openclaw.grading.service.GradingTaskStore;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -42,13 +48,53 @@ public class FeedbackStage implements GradingStage {
     public void execute(GradingContext ctx) throws Exception {
         String json = extractJson(ctx.getAiRawText());
         AssignmentGradingResult result = objectMapper.readValue(json, AssignmentGradingResult.class);
+
+        OrganizedHomework hw = ctx.getOrganizedHomework();
+        Double totalMax = hw != null && hw.getTotalMaxScore() != null
+                ? hw.getTotalMaxScore()
+                : ctx.getRequest().getMaxScore();
         if (result.getMaxScore() == null) {
-            result.setMaxScore(ctx.getRequest().getMaxScore());
+            result.setMaxScore(totalMax);
         }
+
+        // 回填逐题题目原文与学生答案（AI 返回中可能只包含 index/score，不重复原文）
+        if (result.getItems() != null && hw != null && hw.getItems() != null) {
+            Map<Integer, HomeworkItem> srcByIndex = new HashMap<>();
+            for (HomeworkItem src : hw.getItems()) {
+                if (src.getIndex() != null) srcByIndex.put(src.getIndex(), src);
+            }
+            List<ItemGradingResult> outItems = result.getItems();
+            for (int i = 0; i < outItems.size(); i++) {
+                ItemGradingResult ir = outItems.get(i);
+                if (ir.getIndex() == null) ir.setIndex(i + 1);
+                HomeworkItem src = srcByIndex.get(ir.getIndex());
+                if (src != null) {
+                    if (isBlank(ir.getQuestion())) ir.setQuestion(src.getQuestion());
+                    if (isBlank(ir.getAnswer())) ir.setAnswer(src.getAnswer());
+                    if (ir.getMaxScore() == null) ir.setMaxScore(src.getMaxScore());
+                }
+            }
+        }
+
+        // totalScore 兑底：仅在未返回时由 items 汇总
+        if (result.getTotalScore() == null && result.getItems() != null) {
+            double sum = 0;
+            for (ItemGradingResult ir : result.getItems()) {
+                if (ir.getScore() != null) sum += ir.getScore();
+            }
+            result.setTotalScore(sum);
+        }
+
         ctx.setResult(result);
         taskStore.completeTask(ctx.getTaskId(), result);
-        log.info("FeedbackStage ok: score={}/{}, taskId={}",
-                result.getTotalScore(), result.getMaxScore(), ctx.getTaskId());
+        log.info("FeedbackStage ok: score={}/{}, items={}, taskId={}",
+                result.getTotalScore(), result.getMaxScore(),
+                result.getItems() == null ? 0 : result.getItems().size(),
+                ctx.getTaskId());
+    }
+
+    private boolean isBlank(String s) {
+        return s == null || s.trim().isEmpty();
     }
 
     /**

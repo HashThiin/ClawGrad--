@@ -6,16 +6,21 @@ import org.springframework.http.MediaType;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * OpenClaw Gateway 客户端服务（OpenAI 兼容模式）
- * 调用 POST /v1/chat/completions 与 AI 模型对话
+ * <p>按照 OpenClaw 官方推荐方式调用 POST /v1/chat/completions
+ * <p>请求头：Authorization: Bearer {token}
+ * <p>请求体：{"model": "bailian-token-plan/xxx", "messages": [...]}
  */
 @Slf4j
 @Service
@@ -30,19 +35,20 @@ public class OpenClawClientService {
         HttpClient httpClient = HttpClient.create()
                 .responseTimeout(Duration.ofMillis(properties.getTimeout()));
 
+        // 按 OpenClaw 推荐：仅需 Authorization 头，不要 x-openclaw-agent-id（会导致模型锁定）
         this.webClient = WebClient.builder()
                 .baseUrl(properties.getUrl())
                 .clientConnector(new ReactorClientHttpConnector(httpClient))
                 .defaultHeader("Authorization", "Bearer " + properties.getToken())
-                .defaultHeader("x-openclaw-agent-id", properties.getAgentId())
+                .defaultHeader("Content-Type", "application/json")
                 .codecs(c -> c.defaultCodecs().maxInMemorySize(8 * 1024 * 1024))
                 .build();
     }
 
     /**
-     * 调用 Chat Completions API（OpenAI 兼容）
+     * 调用 Chat Completions API（纯文本，OpenAI 兼容）
      *
-     * @param model    模型名（例如 dashscope/glm-5）
+     * @param model        完整模型ID（如 bailian-token-plan/qwen3.6-plus）
      * @param systemPrompt 系统提示
      * @param userPrompt   用户消息
      * @return AI 回复的文本内容
@@ -52,15 +58,31 @@ public class OpenClawClientService {
             return Mono.error(new IllegalStateException("OpenClaw Gateway is disabled"));
         }
 
-        Map<String, Object> body = Map.of(
-                "model", model,
-                "messages", List.of(
-                        Map.of("role", "system", "content", systemPrompt),
-                        Map.of("role", "user", "content", userPrompt)
-                )
-        );
+        // 构建 OpenAI 兼容请求体
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", model);
 
-        log.info("Calling OpenClaw chat completions: model={}", model);
+        List<Map<String, Object>> messages = new ArrayList<>();
+        Map<String, Object> sysMsg = new LinkedHashMap<>();
+        sysMsg.put("role", "system");
+        sysMsg.put("content", systemPrompt);
+        messages.add(sysMsg);
+
+        Map<String, Object> userMsg = new LinkedHashMap<>();
+        userMsg.put("role", "user");
+        userMsg.put("content", userPrompt);
+        messages.add(userMsg);
+
+        body.put("messages", messages);
+
+        String bodyJson;
+        try {
+            bodyJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(body);
+        } catch (Exception e) {
+            bodyJson = body.toString();
+        }
+        log.info("[OpenClaw] 调用模型: model={}", model);
+        log.info("[OpenClaw] 请求体: {}", bodyJson);
 
         return webClient.post()
                 .uri("/v1/chat/completions")
@@ -69,19 +91,31 @@ public class OpenClawClientService {
                 .retrieve()
                 .bodyToMono(Map.class)
                 .map(this::extractContent)
-                .doOnSuccess(text -> log.info("Chat completion success, content length={}", text.length()))
-                .doOnError(err -> log.error("Chat completion failed: {}", err.getMessage()));
+                .doOnSuccess(text -> log.info("[OpenClaw] 成功: model={}, responseLen={}", model, text.length()))
+                .doOnError(WebClientResponseException.class, err ->
+                        log.error("[OpenClaw] HTTP错误: model={}, status={}, body={}",
+                                model, err.getStatusCode(), err.getResponseBodyAsString()))
+                .doOnError(err -> {
+                    if (!(err instanceof WebClientResponseException)) {
+                        log.error("[OpenClaw] 调用失败: model={}, error={}", model, err.getMessage());
+                    }
+                });
     }
 
     /**
-     * 多模态 Chat Completions（OpenClaw 兼容格式）。
-     * <p>userContentParts 例如：
+     * 多模态 Chat Completions（支持图片，OpenClaw 兼容格式）。
+     * <p>userContentParts 为 OpenAI 兼容的 content 数组：
      * <pre>
      * [
      *   {"type":"text","text":"请批改以下作业图片"},
      *   {"type":"image_url","image_url":{"url":"data:image/png;base64,..."}}
      * ]
      * </pre>
+     *
+     * @param model            完整模型ID（如 bailian-token-plan/qwen3.6-plus）
+     * @param systemPrompt     系统提示
+     * @param userContentParts 多模态内容片段
+     * @return AI 回复的文本内容
      */
     public Mono<String> chatCompletionParts(String model, String systemPrompt,
                                              List<Object> userContentParts) {
@@ -89,22 +123,34 @@ public class OpenClawClientService {
             return Mono.error(new IllegalStateException("OpenClaw Gateway is disabled"));
         }
 
-        // 构建完整的消息内容：system prompt + user content parts
-        List<Map<String, Object>> messages = new java.util.ArrayList<>();
-        
+        // 构建 OpenAI 兼容请求体（多模态）
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", model);
+
+        List<Map<String, Object>> messages = new ArrayList<>();
+
         // System message（纯文本）
-        messages.add(Map.of("role", "system", "content", systemPrompt));
-        
+        Map<String, Object> sysMsg = new LinkedHashMap<>();
+        sysMsg.put("role", "system");
+        sysMsg.put("content", systemPrompt);
+        messages.add(sysMsg);
+
         // User message（多模态 content array）
-        messages.add(Map.of("role", "user", "content", userContentParts));
+        Map<String, Object> userMsg = new LinkedHashMap<>();
+        userMsg.put("role", "user");
+        userMsg.put("content", userContentParts);
+        messages.add(userMsg);
 
-        Map<String, Object> body = Map.of(
-                "model", model,
-                "messages", messages
-        );
+        body.put("messages", messages);
 
-        log.info("Calling OpenClaw multimodal chat completions: model={}, parts={}",
-                model, userContentParts.size());
+        String bodyJson;
+        try {
+            bodyJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(body);
+        } catch (Exception e) {
+            bodyJson = body.toString();
+        }
+        log.info("[OpenClaw] 多模态调用: model={}, parts={}", model, userContentParts.size());
+        log.info("[OpenClaw] 多模态请求体: {}", bodyJson);
 
         return webClient.post()
                 .uri("/v1/chat/completions")
@@ -113,22 +159,43 @@ public class OpenClawClientService {
                 .retrieve()
                 .bodyToMono(Map.class)
                 .map(this::extractContent)
-                .doOnSuccess(text -> log.info("Multimodal chat completion success, content length={}", text.length()))
-                .doOnError(err -> log.error("Multimodal chat completion failed: {}", err.getMessage()));
+                .doOnSuccess(text -> log.info("[OpenClaw] 多模态成功: model={}, responseLen={}", model, text.length()))
+                .doOnError(WebClientResponseException.class, err ->
+                        log.error("[OpenClaw] 多模态HTTP错误: model={}, status={}, body={}",
+                                model, err.getStatusCode(), err.getResponseBodyAsString()))
+                .doOnError(err -> {
+                    if (!(err instanceof WebClientResponseException)) {
+                        log.error("[OpenClaw] 多模态调用失败: model={}, error={}", model, err.getMessage());
+                    }
+                });
     }
 
+    /**
+     * 从 OpenAI 兼容响应中提取 content 字段。
+     * 响应格式：{"choices": [{"message": {"content": "..."}}]}
+     */
     @SuppressWarnings("unchecked")
     private String extractContent(Map<?, ?> response) {
+        // 检查是否有 error 字段（Gateway 错误）
+        Object error = response.get("error");
+        if (error != null) {
+            throw new IllegalStateException("OpenClaw Gateway 返回错误: " + error);
+        }
+
         Object choices = response.get("choices");
         if (!(choices instanceof List<?>) || ((List<?>) choices).isEmpty()) {
-            throw new IllegalStateException("OpenClaw response missing choices: " + response);
+            throw new IllegalStateException("OpenClaw 响应缺少 choices: " + response);
         }
         Map<String, Object> first = (Map<String, Object>) ((List<?>) choices).get(0);
         Map<String, Object> message = (Map<String, Object>) first.get("message");
         if (message == null) {
-            throw new IllegalStateException("OpenClaw response missing message: " + response);
+            throw new IllegalStateException("OpenClaw 响应缺少 message: " + response);
         }
         Object content = message.get("content");
-        return content == null ? "" : content.toString();
+        if (content == null || content.toString().isBlank()) {
+            log.warn("[OpenClaw] AI 返回空内容, response={}", response);
+            throw new IllegalStateException("AI 返回内容为空");
+        }
+        return content.toString();
     }
 }
