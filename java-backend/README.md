@@ -1,5 +1,7 @@
 # OpenClaw 智能作业批改系统 (Java 版本)
 
+> 项目级总览请见仓库根目录的 [README.md](../README.md)。本文聚焦后端模块的细节、API 与 OpenClaw Gateway 集成。
+
 基于 Spring Boot 3.x 的高性能智能作业批改系统，集成 OpenClaw Gateway 实现多渠道作业提交和批改结果推送。
 
 ## 🚀 技术栈
@@ -198,10 +200,13 @@ GET /api/v1/webhook/openclaw/health
 - [x] 异步批改任务处理
 - [x] 批改结果推送回原渠道
 - [x] 健康检查和监控
+- [x] **图片上传批改（多模态）** —— `POST /grading/ai-grade-multipart`
+- [x] **多模型可切换** —— `GET /grading/models`，`openclaw.models` 配置
+- [x] **批改流水线模块化** —— `Upload → Preparation → Grading → Feedback`
 
 ### 🚧 待实现
 
-- [ ] 数据库模型和持久层
+- [ ] 数据库模型和持久层（替换内存任务存储）
 - [ ] 用户管理和权限控制
 - [ ] 教师审核队列
 - [ ] 批量作业批改

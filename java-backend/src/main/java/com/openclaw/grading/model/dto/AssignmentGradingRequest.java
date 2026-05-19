@@ -17,13 +17,12 @@ public class AssignmentGradingRequest {
     private String question;
     
     /**
-     * 学生答案
+     * 学生答案（仅上传图片时可为空，校验在 UploadStage 中进行）
      */
-    @NotBlank(message = "学生答案不能为空")
     private String answer;
     
     /**
-     * 附件URL列表（图片、文档等）
+     * 附件URL列表（图片、文档等，保留传统字段以防外部已上传资源）
      */
     private List<String> attachments;
     
@@ -31,4 +30,9 @@ public class AssignmentGradingRequest {
      * 满分（默认100）
      */
     private Double maxScore = 100.0;
+
+    /**
+     * 选择的模型id（为空时使用默认模型）
+     */
+    private String modelId;
 }

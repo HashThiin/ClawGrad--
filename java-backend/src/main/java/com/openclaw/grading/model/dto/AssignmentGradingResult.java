@@ -1,5 +1,7 @@
 package com.openclaw.grading.model.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +15,8 @@ public class AssignmentGradingResult {
     /**
      * 总分
      */
+    @JsonProperty("totalScore")
+    @JsonAlias({"total Score", "TotalScore", "total_score"})
     private Double totalScore;
     
     /**

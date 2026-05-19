@@ -2,7 +2,7 @@ import axios from 'axios'
 
 const api = axios.create({
   baseURL: '/api/v1',
-  timeout: 30000,
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -13,6 +13,7 @@ export interface AIGradingRequest {
   answer: string
   attachments?: string[]
   maxScore?: number
+  modelId?: string
 }
 
 export interface AIGradingResult {
@@ -39,9 +40,48 @@ export interface KnowledgePoint {
   description: string
 }
 
-// 提交AI批改任务（异步）
-export const submitGradingTask = async (request: AIGradingRequest): Promise<{taskId: string, status: string}> => {
+export interface ModelInfo {
+  id: string
+  name: string
+  provider: string
+  supportsVision: boolean
+  description?: string
+  default: boolean
+}
+
+// 获取可用模型列表
+export const fetchModels = async (): Promise<ModelInfo[]> => {
+  const response = await api.get('/grading/models')
+  return response.data
+}
+
+// 提交AI批改任务（异步，纯文本）
+export const submitGradingTask = async (
+  request: AIGradingRequest
+): Promise<{ taskId: string; status: string }> => {
   const response = await api.post('/grading/ai-grade', request)
+  return response.data
+}
+
+// 提交AI批改任务（异步，multipart：文本+图片）
+export const submitGradingTaskMultipart = async (params: {
+  question: string
+  answer?: string
+  maxScore?: number
+  modelId?: string
+  files?: File[]
+}): Promise<{ taskId: string; status: string; uploadedImages?: number }> => {
+  const fd = new FormData()
+  fd.append('question', params.question)
+  if (params.answer) fd.append('answer', params.answer)
+  if (params.maxScore != null) fd.append('maxScore', String(params.maxScore))
+  if (params.modelId) fd.append('modelId', params.modelId)
+  if (params.files && params.files.length > 0) {
+    params.files.forEach((f) => fd.append('files', f))
+  }
+  const response = await api.post('/grading/ai-grade-multipart', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
   return response.data
 }
 

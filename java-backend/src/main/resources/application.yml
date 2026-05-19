@@ -6,6 +6,13 @@ server:
 spring:
   application:
     name: openclaw-intelligent-grading
+
+  # Multipart 上传限制（图片批改）
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 20MB
+      max-request-size: 60MB
   
   # Database Configuration
   datasource:
@@ -32,7 +39,7 @@ spring:
   data:
     redis:
       host: localhost
-      port: 6379
+      port: 6380
       password: 
       database: 0
       timeout: 5000ms
@@ -57,20 +64,38 @@ spring:
 openclaw:
   gateway:
     # OpenClaw 提供 OpenAI 兼容 /v1/chat/completions
-    # 服务端已配置 iptables 转发 18789 → 127.0.0.1:18789
+    # Gateway 运行在云服务器
     url: http://47.122.119.189:18789
     token: 20de693491980119110e7d5c2543419cd1629c770211296af32498cba736c8ed
     timeout: 60000
     enabled: true
     # 默认调用的模型（来自 OpenClaw 配置中的 dashscope 提供商）
-    model: dashscope/glm-5
+    model: dashscope/qwen3.5-plus
     callback-url: http://localhost:8080/api/v1/callback/grading
+    # OpenClaw Agent ID
+    agent-id: main
   webhook:
     path: /webhook/openclaw
     secret: your-webhook-secret
+  # 可切换的多模型清单（后端 GET /grading/models 返回这个列表）
+  default-model: dashscope/qwen3.5-plus
+  models:
+    - id: dashscope/qwen3.5-plus
+      name: 通义 Qwen3.5 Plus
+      provider: dashscope
+      supports-vision: true
+      description: 支持文本+图片多模态，适合作业批改
+    - id: dashscope/kimi-k2.5
+      name: Kimi K2.5
+      provider: dashscope
+      supports-vision: true
+      description: Moonshot Kimi 多模态模型，支持图片理解
 
 # Grading Configuration
 grading:
+  storage:
+    # 上传图片落盘目录（按 archiveId 子目录）
+    dir: ./storage
   code:
     sandbox-enabled: true
     sandbox-timeout: 5000
