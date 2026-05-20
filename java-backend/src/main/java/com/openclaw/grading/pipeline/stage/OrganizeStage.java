@@ -208,12 +208,156 @@ public class OrganizeStage implements GradingStage {
         String cleaned = raw.replaceAll("(?s)```json", "")
                 .replaceAll("(?s)```", "")
                 .trim();
+        
+        // 清洗 JSON 字符串值中的非法控制字符（换行符、制表符等）
+        cleaned = escapeControlCharsInJsonStringValues(cleaned);
+        
         Matcher m = JSON_BLOCK.matcher(cleaned);
         if (!m.find()) {
             throw new IllegalStateException("Organize 阶段未找到 JSON 块: " +
                     (cleaned.length() > 300 ? cleaned.substring(0, 300) + "..." : cleaned));
         }
-        return objectMapper.readValue(m.group(), OrganizedHomework.class);
+        
+        String json = m.group();
+        
+        // 容错解析：忽略未知字段，尽量解析能识别的部分
+        try {
+            return objectMapper
+                    .reader()
+                    .with(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+                    .without(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES)
+                    .readValue(json, OrganizedHomework.class);
+        } catch (Exception e) {
+            log.warn("Organize JSON parse error, attempting fallback: {}", e.getMessage());
+            return parseOrganizedHomeworkFallback(json);
+        }
+    }
+    
+    /**
+     * 兜底解析：当标准解析失败时，手动提取关键字段
+     */
+    private OrganizedHomework parseOrganizedHomeworkFallback(String json) {
+        log.info("Using fallback parser for OrganizedHomework");
+        OrganizedHomework hw = new OrganizedHomework();
+        
+        // 提取 subject
+        hw.setSubject(extractStringField(json, "subject", "未知"));
+        
+        // 提取 items 数组（简易解析）
+        List<HomeworkItem> items = extractItemsArray(json);
+        hw.setItems(items);
+        
+        // 提取总满分
+        hw.setMaxScore(extractDoubleField(json, "maxScore", 100.0));
+        
+        return hw;
+    }
+    
+    /**
+     * 简易提取字符串字段
+     */
+    private String extractStringField(String json, String fieldName, String defaultValue) {
+        Pattern pattern = Pattern.compile("\"" + fieldName + "\"\\s*:\s*\"([^\"]*)\"");
+        Matcher m = pattern.matcher(json);
+        if (m.find()) {
+            return m.group(1);
+        }
+        return defaultValue;
+    }
+    
+    /**
+     * 简易提取数字字段
+     */
+    private Double extractDoubleField(String json, String fieldName, double defaultValue) {
+        Pattern pattern = Pattern.compile("\"" + fieldName + "\"\\s*:\s*([0-9.]+)");
+        Matcher m = pattern.matcher(json);
+        if (m.find()) {
+            try {
+                return Double.parseDouble(m.group(1));
+            } catch (NumberFormatException e) {
+                return defaultValue;
+            }
+        }
+        return defaultValue;
+    }
+    
+    /**
+     * 简易提取 items 数组（使用 Jackson 树模型，支持嵌套花括号）
+     */
+    private List<HomeworkItem> extractItemsArray(String json) {
+        List<HomeworkItem> items = new ArrayList<>();
+        try {
+            com.fasterxml.jackson.databind.JsonNode root = objectMapper.readTree(json);
+            com.fasterxml.jackson.databind.JsonNode itemsNode = root.get("items");
+            if (itemsNode == null || !itemsNode.isArray()) return items;
+
+            int idx = 1;
+            for (com.fasterxml.jackson.databind.JsonNode node : itemsNode) {
+                HomeworkItem item = new HomeworkItem();
+                item.setIndex(node.has("index") ? node.get("index").asInt(idx) : idx);
+                item.setQuestion(node.has("question") ? node.get("question").asText("") : "");
+                item.setAnswer(node.has("answer") ? node.get("answer").asText("") : "");
+                item.setMaxScore(node.has("maxScore") ? node.get("maxScore").asDouble(0.0) : 0.0);
+                items.add(item);
+                idx++;
+            }
+        } catch (Exception e) {
+            log.warn("Fallback items extraction also failed: {}", e.getMessage());
+        }
+        return items;
+    }
+    
+    /**
+     * 转义 JSON 字符串值中的控制字符（\n, \t, \r 等），避免 Jackson 解析失败。
+     * 只处理字符串值内部（双引号内的内容），不破坏 JSON 结构。
+     */
+    private String escapeControlCharsInJsonStringValues(String json) {
+        StringBuilder result = new StringBuilder();
+        boolean inString = false;
+        boolean escaped = false;
+        
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+            
+            if (escaped) {
+                result.append(c);
+                escaped = false;
+                continue;
+            }
+            
+            if (c == '\\') {
+                result.append(c);
+                escaped = true;
+                continue;
+            }
+            
+            if (c == '"') {
+                result.append(c);
+                inString = !inString;
+                continue;
+            }
+            
+            if (inString) {
+                // 在字符串值内，转义控制字符
+                if (c == '\n') {
+                    result.append("\\n");
+                } else if (c == '\r') {
+                    result.append("\\r");
+                } else if (c == '\t') {
+                    result.append("\\t");
+                } else if (c < 0x20) {
+                    // 其他控制字符，转义为 Unicode 格式 (反斜杠 u 00XX)
+                    result.append(String.format("\\u%04x", (int) c));
+                } else {
+                    result.append(c);
+                }
+            } else {
+                // 在字符串外（JSON 结构部分），直接保留
+                result.append(c);
+            }
+        }
+        
+        return result.toString();
     }
 
     private boolean isBlank(String s) {

@@ -96,6 +96,16 @@ public class GradingTaskStore {
             status.setError(error);
         }
     }
+
+    /** 任务超时（非失败，提供重试选项） */
+    public void timeoutTask(String taskId, String error, boolean suggestFastModel) {
+        TaskStatus status = taskStore.get(taskId);
+        if (status != null) {
+            status.setStatus("TIMEOUT");
+            status.setError(error);
+            status.setSuggestFastModel(suggestFastModel);
+        }
+    }
     
     public TaskStatus getTask(String taskId) {
         return taskStore.get(taskId);
@@ -105,12 +115,14 @@ public class GradingTaskStore {
         private String taskId;
         private String question;
         private String answer;
-        private String status;  // PROCESSING, COMPLETED, FAILED
+        private String status;  // PROCESSING, COMPLETED, FAILED, TIMEOUT
         private AssignmentGradingResult result;
         private OrganizedHomework organizedHomework;
         private String error;
         private List<StageProgress> stages;
         private String currentStage;
+        /** 超时时建议切换快速模型 */
+        private boolean suggestFastModel;
         
         // Getters and Setters
         public String getTaskId() { return taskId; }
@@ -139,6 +151,9 @@ public class GradingTaskStore {
         
         public String getCurrentStage() { return currentStage; }
         public void setCurrentStage(String currentStage) { this.currentStage = currentStage; }
+        
+        public boolean isSuggestFastModel() { return suggestFastModel; }
+        public void setSuggestFastModel(boolean suggestFastModel) { this.suggestFastModel = suggestFastModel; }
     }
 
     /** 单个阶段的进度 */

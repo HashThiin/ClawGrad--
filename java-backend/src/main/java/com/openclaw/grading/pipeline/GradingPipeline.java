@@ -13,6 +13,7 @@ import java.util.List;
 /**
  * 批改流水线编排器：把所有 {@link GradingStage} 按 order 串起来跑。
  * <p>通过 {@link Async} 注解异步执行，避免阻塞 HTTP 请求线程。
+ * <p>超时异常会被特殊处理为 TIMEOUT 状态，前端显示重试选项。
  */
 @Slf4j
 @Component
@@ -63,6 +64,19 @@ public class GradingPipeline {
                 long cost = Duration.between(t0, Instant.now()).toMillis();
                 ctx.getStageTimings().put(stage.name(), cost);
                 taskStore.stageFailed(ctx.getTaskId(), stage.name(), cost);
+
+                if (isTimeoutException(e)) {
+                    String msg = "[" + stage.name() + "] 思考时间过长，AI批改响应超过限制（" + (cost / 1000) + "秒）。";
+                    log.warn("[Pipeline] stage={} TIMEOUT in {}ms (taskId={})",
+                            stage.name(), cost, ctx.getTaskId());
+                    ctx.setError(msg);
+                    // 当前模型不含快速标识（如 flash）时建议切换
+                    String modelId = ctx.getModelId();
+                    boolean suggestFast = modelId != null && !modelId.toLowerCase().contains("flash");
+                    taskStore.timeoutTask(ctx.getTaskId(), msg, suggestFast);
+                    return;
+                }
+
                 String msg = "[" + stage.name() + "] " + e.getMessage();
                 log.error("[Pipeline] stage={} FAILED in {}ms (taskId={}): {}",
                         stage.name(), cost, ctx.getTaskId(), msg, e);
@@ -74,5 +88,26 @@ public class GradingPipeline {
 
         log.info("[Pipeline] complete taskId={}, total stages={}, timings={}",
                 ctx.getTaskId(), stages.size(), ctx.getStageTimings());
+    }
+
+    /**
+     * 判断异常是否为超时相关。
+     */
+    private boolean isTimeoutException(Exception e) {
+        if (e == null) return false;
+        // 检查消息
+        String msg = e.getMessage();
+        if (msg != null && msg.toLowerCase().contains("timeout")) return true;
+        // 递归检查 cause 链
+        Throwable cause = e.getCause();
+        if (cause != null) {
+            String cls = cause.getClass().getSimpleName();
+            if (cls.contains("TimeoutException") || cls.contains("ReadTimeout")) return true;
+            // 递归
+            if (cause instanceof Exception) {
+                return isTimeoutException((Exception) cause);
+            }
+        }
+        return false;
     }
 }

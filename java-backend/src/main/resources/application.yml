@@ -67,7 +67,7 @@ openclaw:
     # Gateway 运行在云服务器
     url: http://47.122.119.189:18789
     token: 65efb3eaba41095efcf235033bcaf3e44d8e094c38c76c3bed1c4e74fe478379
-    timeout: 60000
+    timeout: 300000
     enabled: true
     # 默认调用的模型（来自 OpenClaw 配置中的 bailian-token-plan 提供商）
     model: bailian-token-plan/qwen3.6-plus

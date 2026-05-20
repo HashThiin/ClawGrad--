@@ -67,13 +67,17 @@ export interface StageProgress {
 
 export interface TaskResultResponse {
   taskId: string
-  status: 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'NOT_FOUND'
+  status: 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'TIMEOUT' | 'NOT_FOUND'
   result?: AIGradingResult
   organizedHomework?: OrganizedHomework
   stages?: StageProgress[]
   currentStage?: string
   error?: string
   message?: string
+  /** 超时重试用 */
+  question?: string
+  answer?: string
+  suggestFastModel?: boolean
 }
 
 export interface ErrorPoint {

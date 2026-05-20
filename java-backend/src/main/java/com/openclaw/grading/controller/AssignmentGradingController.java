@@ -162,6 +162,28 @@ public class AssignmentGradingController {
                 body.put("currentStage", task.getCurrentStage());
             }
             return ResponseEntity.ok(body);
+        } else if ("TIMEOUT".equals(task.getStatus())) {
+            java.util.Map<String, Object> body = new java.util.LinkedHashMap<>();
+            body.put("taskId", taskId);
+            body.put("status", "TIMEOUT");
+            body.put("error", task.getError() != null ? task.getError() : "批改响应超时");
+            body.put("suggestFastModel", task.isSuggestFastModel());
+            if (task.getQuestion() != null) {
+                body.put("question", task.getQuestion());
+            }
+            if (task.getAnswer() != null) {
+                body.put("answer", task.getAnswer());
+            }
+            if (task.getOrganizedHomework() != null) {
+                body.put("organizedHomework", task.getOrganizedHomework());
+            }
+            if (task.getStages() != null) {
+                body.put("stages", task.getStages());
+            }
+            if (task.getCurrentStage() != null) {
+                body.put("currentStage", task.getCurrentStage());
+            }
+            return ResponseEntity.ok(body);
         } else if ("FAILED".equals(task.getStatus())) {
             java.util.Map<String, Object> body = new java.util.LinkedHashMap<>();
             body.put("taskId", taskId);

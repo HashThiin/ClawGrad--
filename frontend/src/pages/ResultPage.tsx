@@ -16,6 +16,7 @@ import {
   Collapse,
   Alert,
   Empty,
+  message,
 } from 'antd'
 import {
   ArrowLeftOutlined,
@@ -23,7 +24,7 @@ import {
   CloseCircleTwoTone,
   ExclamationCircleTwoTone,
 } from '@ant-design/icons'
-import { pollTaskResult } from '../services/api'
+import { pollTaskResult, submitGradingTask } from '../services/api'
 import type {
   AIGradingResult,
   OrganizedHomework,
@@ -89,6 +90,11 @@ const ResultPage = () => {
   const [status, setStatus] = useState<string>('PROCESSING')
   const [error, setError] = useState('')
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [timeoutData, setTimeoutData] = useState<{
+    question?: string
+    answer?: string
+    suggestFastModel?: boolean
+  } | null>(null)
 
   useEffect(() => {
     if (!taskId) return
@@ -111,6 +117,16 @@ const ResultPage = () => {
       if (data.status === 'COMPLETED') {
         setResult(data.result)
         if (intervalRef.current) clearInterval(intervalRef.current)
+      } else if (data.status === 'TIMEOUT') {
+        setStatus('TIMEOUT')
+        setError(data.error || '批改超时')
+        setTimeoutData({
+          question: data.question,
+          answer: data.answer,
+          suggestFastModel: data.suggestFastModel,
+        })
+        if (data.organizedHomework) setOrganized(data.organizedHomework)
+        if (intervalRef.current) clearInterval(intervalRef.current)
       } else if (data.status === 'FAILED') {
         setError(data.error || '批改失败')
         if (intervalRef.current) clearInterval(intervalRef.current)
@@ -118,6 +134,28 @@ const ResultPage = () => {
     } catch (e) {
       console.error('轮询失败:', e)
     }
+  }
+
+  // 超时后重试：用快速模型重新提交
+  const handleRetryWithFastModel = async () => {
+    if (!timeoutData) return
+    try {
+      const res = await submitGradingTask({
+        question: timeoutData.question || '',
+        answer: timeoutData.answer || '',
+        modelId: 'bailian-token-plan/qwen3.6-flash',
+      })
+      setTimeoutData(null)
+      navigate(`/result/${res.taskId}`)
+    } catch (e: any) {
+      message.error('重试提交失败: ' + (e.response?.data?.message || e.message))
+    }
+  }
+
+  // 退出超时任务
+  const handleTimeoutExit = () => {
+    setTimeoutData(null)
+    navigate('/')
   }
 
   // 当前正在跑的阶段索引
@@ -345,6 +383,51 @@ const ResultPage = () => {
   )
 
   // ----------- 渲染 -----------
+  // 超时
+  if (status === 'TIMEOUT') {
+    return (
+      <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
+        {renderPipelineCard()}
+        {organized && renderOrganizedCard()}
+        <Card style={{ marginBottom: 24 }}>
+          <Result
+            status="warning"
+            title="⏱ 思考时间过长"
+            subTitle={
+              <span>
+                {error}
+                <br />
+                当前模型在处理本题时超过了 5 分钟响应限制。
+              </span>
+            }
+            extra={
+              <Space direction="vertical" style={{ width: '100%', maxWidth: 400 }}>
+                {timeoutData?.suggestFastModel && (
+                  <Button
+                    type="primary"
+                    size="large"
+                    block
+                    onClick={handleRetryWithFastModel}
+                  >
+                    更换快速模型重试（Qwen3.6 Flash）
+                  </Button>
+                )}
+                <Space>
+                  <Button onClick={() => navigate('/grade')} block>
+                    返回批改页面重新配置
+                  </Button>
+                  <Button danger block onClick={handleTimeoutExit}>
+                    退出
+                  </Button>
+                </Space>
+              </Space>
+            }
+          />
+        </Card>
+      </div>
+    )
+  }
+
   // 失败
   if (status === 'FAILED') {
     return (
