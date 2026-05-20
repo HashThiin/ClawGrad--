@@ -601,58 +601,6 @@ ClawGrad--/
 
 ---
 
-## 🧩 项目扩展指南
-
-### 新增一个流水线阶段
-
-```java
-/**
- * 只需实现接口 + @Component，流水线自动编排
- */
-@Component
-public class MyStage implements GradingStage {
-    @Override public String name() { return "my-stage"; }
-    @Override public int order() { return 25; } // 控制插入位置
-    @Override public void execute(GradingContext ctx) {
-        // 读取 ctx 上游产物，写入下游所需
-    }
-}
-```
-
-### 支持新的文件类型
-
-在 `UploadStage` 中扩展解析逻辑：
-
-| 新增类型 | 扩展方式 |
-|----------|---------|
-| PDF 作业 | 集成 PDFBox，提取文字后走纯文本路径 |
-| Word 文档 | 集成 Apache POI，提取文字后走纯文本路径 |
-| 音频录音 | 集成语音转文字服务，结果走纯文本路径 |
-
-### 自定义批改维度
-
-修改 `GradingStageImpl.buildGradingUserPrompt()` 中的批改要求：
-
-```java
-// 在原有基础上增加自定义维度
-p.append("7. creativity 创意评分（满分 = 总满分）\n")
- .append("8. presentation 书写规范评分（满分 = 总满分）\n");
-```
-
-输出 JSON 会自动包含 `dimensionScores: { "创意": xx, "书写规范": xx }`。
-
-### 对接外部系统
-
-通过 OpenClaw 回调接口实现：
-
-```
-批改完成 ──▶ POST /api/v1/callback/grading ──▶ 写入数据库
-                                      │
-                                      └──▶ OpenClaw Webhook ──▶ 推送通知到学生
-```
-
----
-
 ## 💡 设计决策记录
 
 | 决策 | 选择 | 理由 |
