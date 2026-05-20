@@ -1,4 +1,4 @@
-# OpenClaw 智能作业批改系统 (Java 版本)
+# ClawGrad 智能作业批改系统 (Java 后端)
 
 > 项目级总览请见仓库根目录的 [README.md](../README.md)。本文聚焦后端模块的细节、API 与 OpenClaw Gateway 集成。
 

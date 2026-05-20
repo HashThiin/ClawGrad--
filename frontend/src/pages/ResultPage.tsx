@@ -135,7 +135,7 @@ const ResultPage = () => {
     <Card
       title={
         <Space>
-          <span>OpenClaw Skill 批改流水线</span>
+          <span>ClawGrad Skill 批改流水线</span>
           {status === 'PROCESSING' && <Spin size="small" />}
           {status === 'COMPLETED' && <Tag color="success">已完成</Tag>}
           {status === 'FAILED' && <Tag color="error">已失败</Tag>}

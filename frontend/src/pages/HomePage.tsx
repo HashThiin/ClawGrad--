@@ -10,7 +10,7 @@ const HomePage = () => {
   return (
     <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
       <Title level={2} style={{ textAlign: 'center', marginBottom: '40px' }}>
-        OpenClaw 智能作业批改系统
+        ClawGrad 智能作业批改系统
       </Title>
       
       <Row gutter={[24, 24]}>
