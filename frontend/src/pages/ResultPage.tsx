@@ -90,6 +90,7 @@ const ResultPage = () => {
   const [status, setStatus] = useState<string>('PROCESSING')
   const [error, setError] = useState('')
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [modelName, setModelName] = useState<string>('')
   const [timeoutData, setTimeoutData] = useState<{
     question?: string
     answer?: string
@@ -113,6 +114,7 @@ const ResultPage = () => {
       if (data.stages) setStages(data.stages)
       if (data.currentStage) setCurrentStage(data.currentStage)
       if (data.organizedHomework) setOrganized(data.organizedHomework)
+      if (data.modelName) setModelName(data.modelName)
 
       if (data.status === 'COMPLETED') {
         setResult(data.result)
@@ -174,6 +176,7 @@ const ResultPage = () => {
       title={
         <Space>
           <span>ClawGrad Skill 批改流水线</span>
+          {modelName && <Tag color="cyan">{modelName}</Tag>}
           {status === 'PROCESSING' && <Spin size="small" />}
           {status === 'COMPLETED' && <Tag color="success">已完成</Tag>}
           {status === 'FAILED' && <Tag color="error">已失败</Tag>}

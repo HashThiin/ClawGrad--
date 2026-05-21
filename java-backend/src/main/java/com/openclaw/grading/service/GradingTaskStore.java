@@ -18,11 +18,13 @@ public class GradingTaskStore {
     
     private final Map<String, TaskStatus> taskStore = new ConcurrentHashMap<>();
     
-    public void createTask(String taskId, String question, String answer) {
+    public void createTask(String taskId, String question, String answer, String modelId, String modelName) {
         TaskStatus status = new TaskStatus();
         status.setTaskId(taskId);
         status.setQuestion(question);
         status.setAnswer(answer);
+        status.setModelId(modelId);
+        status.setModelName(modelName);
         status.setStatus("PROCESSING");
         // 预初始化 4 阶段进度
         List<StageProgress> stages = new ArrayList<>();
@@ -123,6 +125,10 @@ public class GradingTaskStore {
         private String currentStage;
         /** 超时时建议切换快速模型 */
         private boolean suggestFastModel;
+        /** 使用的模型ID */
+        private String modelId;
+        /** 使用的模型展示名 */
+        private String modelName;
         
         // Getters and Setters
         public String getTaskId() { return taskId; }
@@ -154,6 +160,12 @@ public class GradingTaskStore {
         
         public boolean isSuggestFastModel() { return suggestFastModel; }
         public void setSuggestFastModel(boolean suggestFastModel) { this.suggestFastModel = suggestFastModel; }
+
+        public String getModelId() { return modelId; }
+        public void setModelId(String modelId) { this.modelId = modelId; }
+
+        public String getModelName() { return modelName; }
+        public void setModelName(String modelName) { this.modelName = modelName; }
     }
 
     /** 单个阶段的进度 */

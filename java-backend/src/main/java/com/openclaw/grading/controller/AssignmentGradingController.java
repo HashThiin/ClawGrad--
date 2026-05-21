@@ -161,6 +161,8 @@ public class AssignmentGradingController {
             if (task.getCurrentStage() != null) {
                 body.put("currentStage", task.getCurrentStage());
             }
+            body.put("modelId", task.getModelId());
+            body.put("modelName", task.getModelName());
             return ResponseEntity.ok(body);
         } else if ("TIMEOUT".equals(task.getStatus())) {
             java.util.Map<String, Object> body = new java.util.LinkedHashMap<>();
@@ -183,6 +185,8 @@ public class AssignmentGradingController {
             if (task.getCurrentStage() != null) {
                 body.put("currentStage", task.getCurrentStage());
             }
+            body.put("modelId", task.getModelId());
+            body.put("modelName", task.getModelName());
             return ResponseEntity.ok(body);
         } else if ("FAILED".equals(task.getStatus())) {
             java.util.Map<String, Object> body = new java.util.LinkedHashMap<>();
@@ -195,6 +199,8 @@ public class AssignmentGradingController {
             if (task.getCurrentStage() != null) {
                 body.put("currentStage", task.getCurrentStage());
             }
+            body.put("modelId", task.getModelId());
+            body.put("modelName", task.getModelName());
             return ResponseEntity.ok(body);
         } else {
             java.util.Map<String, Object> body = new java.util.LinkedHashMap<>();
@@ -211,6 +217,8 @@ public class AssignmentGradingController {
             if (task.getOrganizedHomework() != null) {
                 body.put("organizedHomework", task.getOrganizedHomework());
             }
+            body.put("modelId", task.getModelId());
+            body.put("modelName", task.getModelName());
             return ResponseEntity.ok(body);
         }
     }

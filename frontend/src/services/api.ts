@@ -74,6 +74,10 @@ export interface TaskResultResponse {
   currentStage?: string
   error?: string
   message?: string
+  /** 使用的模型ID */
+  modelId?: string
+  /** 使用的模型展示名 */
+  modelName?: string
   /** 超时重试用 */
   question?: string
   answer?: string

@@ -48,6 +48,8 @@ public class FeedbackStage implements GradingStage {
     @Override
     public void execute(GradingContext ctx) throws Exception {
         String json = extractJson(ctx.getAiRawText());
+        // 预清洗：JSON 中字符串值内的未转义双引号自动转义
+        String cleanedJson = repairJson(json);
         
         AssignmentGradingResult result;
         try {
@@ -56,10 +58,10 @@ public class FeedbackStage implements GradingStage {
                     .reader()
                     .with(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
                     .without(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES)
-                    .readValue(json, AssignmentGradingResult.class);
+                    .readValue(cleanedJson, AssignmentGradingResult.class);
         } catch (Exception e) {
             log.warn("Feedback JSON parse error, attempting fallback: {}", e.getMessage());
-            result = parseGradingResultFallback(json, ctx);
+            result = parseGradingResultFallback(cleanedJson, ctx);
         }
 
         OrganizedHomework hw = ctx.getOrganizedHomework();
@@ -98,6 +100,9 @@ public class FeedbackStage implements GradingStage {
             result.setTotalScore(sum);
         }
 
+        // 兜底校验：分数不超上限
+        sanitizeScores(result);
+
         ctx.setResult(result);
         taskStore.completeTask(ctx.getTaskId(), result);
         log.info("FeedbackStage ok: score={}/{}, items={}, taskId={}",
@@ -107,17 +112,15 @@ public class FeedbackStage implements GradingStage {
     }
 
     /**
-     * 兜底校验：确保 totalScore 不超过 maxScore，各 item score 不超 maxScore
+     * 兜底校验：确保 totalScore 不超过 maxScore，各 item score 不超其 maxScore
      */
     private void sanitizeScores(AssignmentGradingResult result) {
         Double max = result.getMaxScore();
         if (max == null) return;
-        // 限制总分
         if (result.getTotalScore() != null && result.getTotalScore() > max) {
             log.warn("totalScore {} capped to maxScore {}", result.getTotalScore(), max);
             result.setTotalScore(max);
         }
-        // 限制各题分数
         if (result.getItems() != null) {
             for (ItemGradingResult item : result.getItems()) {
                 Double itemMax = item.getMaxScore();
@@ -232,6 +235,54 @@ public class FeedbackStage implements GradingStage {
         
         return result.toString();
     }
+
+    /**
+     * 预清洗 JSON：识别并转义字符串值内未用反斜杠转义的双引号。
+     * <p>AI 模型常在中文字段中直接输出双引号（如「但所谓"最右推导"」）而不加反斜杠，
+     * 导致 Jackson 和所有 JSON 解析器失败。</p>
+     * <p>算法：逐字符扫描，跟踪字符串边界。当在字符串内遇到 {@code "}，
+     * 检查下一个非空白字符是否是 JSON 结构字符（, ] } :），
+     * 如果是则视为字符串结束符，否则视为嵌入引号并转义为 {@code \"}。</p>
+     */
+    private String repairJson(String raw) {
+        StringBuilder sb = new StringBuilder();
+        boolean inString = false;
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            // 正在转义序列中，直接保留
+            if (c == '\\' && inString) {
+                sb.append(c);
+                i++;
+                if (i < raw.length()) sb.append(raw.charAt(i));
+                continue;
+            }
+            if (c == '"') {
+                if (!inString) {
+                    inString = true;
+                    sb.append(c);
+                } else {
+                    // 在字符串内遇到 "，判断是否为结构结束符
+                    int next = i + 1;
+                    while (next < raw.length() && (raw.charAt(next) == ' ' || raw.charAt(next) == '\t'
+                            || raw.charAt(next) == '\n' || raw.charAt(next) == '\r')) {
+                        next++;
+                    }
+                    if (next < raw.length() && (raw.charAt(next) == ',' || raw.charAt(next) == ']'
+                            || raw.charAt(next) == '}' || raw.charAt(next) == ':')) {
+                        // 结构结束符 → 关闭字符串
+                        inString = false;
+                        sb.append(c);
+                    } else {
+                        // 嵌入引号 → 转义
+                        sb.append("\\\"");
+                    }
+                }
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
     
     /**
      * 兜底解析：当标准解析失败时，手动提取关键字段
@@ -321,21 +372,56 @@ public class FeedbackStage implements GradingStage {
     }
 
     /**
-     * 第三层兜底：当 readTree 也失败时，用正则逐项提取 items
+     * 第三层兜底：当 readTree 也失败时，用字符扫描逐项提取 items
      * 适用于 JSON 结构部分损坏但 item 对象本身完整的情况
      */
     private List<ItemGradingResult> extractItemsViaRegex(String json) {
         List<ItemGradingResult> items = new ArrayList<>();
         try {
-            // 1. 找出 "items":[...] 区域
-            Matcher regionMatcher = Pattern.compile("\"items\"\\s*:\\s*\\[(.*?)(?:\\]|$)", Pattern.DOTALL).matcher(json);
-            if (!regionMatcher.find()) {
+            // 1. 定位 "items":[ 的起始位置
+            int itemsStart = json.indexOf("\"items\":");
+            if (itemsStart < 0) {
                 log.warn("Regex fallback: could not find items section");
                 return items;
             }
-            String region = regionMatcher.group(1);
+            // 跳过 "items": 找到 [
+            int bracketStart = json.indexOf('[', itemsStart + 8);
+            if (bracketStart < 0) {
+                log.warn("Regex fallback: no array bracket after items key");
+                return items;
+            }
 
-            // 2. 用大括号匹配逐项提取
+            // 2. 字符扫描找到匹配的 ]（考虑字符串边界和嵌套）
+            boolean inStr = false;
+            int bracketDepth = 0;
+            int regionEnd = -1;
+            for (int i = bracketStart; i < json.length(); i++) {
+                char ch = json.charAt(i);
+                if (ch == '"') {
+                    // 跳过已转义引号
+                    if (!inStr || i == 0 || json.charAt(i - 1) != '\\') {
+                        inStr = !inStr;
+                    }
+                } else if (!inStr) {
+                    if (ch == '[') bracketDepth++;
+                    else if (ch == ']') {
+                        bracketDepth--;
+                        if (bracketDepth == 0) {
+                            regionEnd = i;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (regionEnd < 0) {
+                log.warn("Regex fallback: unmatched array bracket");
+                return items;
+            }
+
+            String region = json.substring(bracketStart + 1, regionEnd);
+            log.info("Regex fallback: items region length={}", region.length());
+
+            // 3. 大括号深度匹配提取每个 item
             int braceDepth = 0;
             int objStart = -1;
             for (int i = 0; i < region.length(); i++) {

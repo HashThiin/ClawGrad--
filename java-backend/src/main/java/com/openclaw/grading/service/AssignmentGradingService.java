@@ -21,10 +21,13 @@ public class AssignmentGradingService {
 
     private final GradingTaskStore taskStore;
     private final GradingPipeline pipeline;
+    private final ModelCatalogService modelCatalog;
 
-    public AssignmentGradingService(GradingTaskStore taskStore, GradingPipeline pipeline) {
+    public AssignmentGradingService(GradingTaskStore taskStore, GradingPipeline pipeline,
+                                     ModelCatalogService modelCatalog) {
         this.taskStore = taskStore;
         this.pipeline = pipeline;
+        this.modelCatalog = modelCatalog;
     }
 
     /**
@@ -43,7 +46,18 @@ public class AssignmentGradingService {
         log.info("Submit grading task: taskId={}, model={}, images={}",
                 taskId, request.getModelId(), images == null ? 0 : images.size());
 
-        taskStore.createTask(taskId, request.getQuestion(), request.getAnswer());
+        // 解析模型ID和展示名
+        String modelId = request.getModelId();
+        String modelName = modelId;
+        try {
+            ModelCatalogService.ModelInfo info = modelCatalog.resolve(modelId);
+            modelId = info.getId();
+            modelName = info.getName();
+        } catch (Exception e) {
+            log.warn("Cannot resolve model '{}', use raw id as display name", modelId);
+        }
+
+        taskStore.createTask(taskId, request.getQuestion(), request.getAnswer(), modelId, modelName);
 
         GradingContext ctx = new GradingContext();
         ctx.setTaskId(taskId);
