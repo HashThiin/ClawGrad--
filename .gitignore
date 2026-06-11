@@ -1,0 +1,27 @@
+# Local environment
+.env
+*.local
+
+# Frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
+
+# Backend build output
+java-backend/target/
+target/
+
+# Runtime uploads and generated files
+java-backend/storage/
+storage/
+
+# Logs and caches
+*.log
+.npm-cache/
+.cache/
+.vite/
+
+# IDE / OS
+.idea/
+*.iml
+Thumbs.db
+.DS_Store
