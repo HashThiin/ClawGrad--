@@ -1,6 +1,7 @@
 package com.openclaw.grading.config;
 
 import com.openclaw.grading.security.JwtAuthenticationFilter;
+import com.openclaw.grading.security.JsonSecurityExceptionHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -24,16 +25,15 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    JwtAuthenticationFilter jwtAuthenticationFilter,
-                                                   AuthenticationProvider authenticationProvider) throws Exception {
+                                                   AuthenticationProvider authenticationProvider,
+                                                   JsonSecurityExceptionHandler securityExceptionHandler) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(ex -> ex
-                        .authenticationEntryPoint((request, response, authException) ->
-                                response.sendError(401, "Unauthorized"))
-                        .accessDeniedHandler((request, response, accessDeniedException) ->
-                                response.sendError(403, "Forbidden")))
+                        .authenticationEntryPoint(securityExceptionHandler)
+                        .accessDeniedHandler(securityExceptionHandler))
                 .authenticationProvider(authenticationProvider)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/grading/models").permitAll()

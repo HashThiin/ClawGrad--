@@ -523,6 +523,8 @@ OPENCLAW_GATEWAY_TOKEN=replace-with-your-openclaw-token
 OPENCLAW_GATEWAY_MODEL=bailian-token-plan/qwen3.6-plus
 JWT_SECRET_KEY=replace-with-a-long-random-dev-secret
 JWT_EXPIRE_MINUTES=720
+JWT_REQUIRE_STRONG_SECRET=false
+REFRESH_TOKEN_EXPIRE_DAYS=14
 ```
 
 注意：
@@ -611,8 +613,10 @@ npm run build
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/api/v1/auth/register` | 学生注册，成功后返回 JWT |
-| `POST` | `/api/v1/auth/login` | 学生登录，成功后返回 JWT |
+| `POST` | `/api/v1/auth/register` | 学生注册，成功后返回 access token 和 refresh token |
+| `POST` | `/api/v1/auth/login` | 学生登录，成功后返回 access token 和 refresh token |
+| `POST` | `/api/v1/auth/refresh` | 使用 refresh token 轮换新的 token |
+| `POST` | `/api/v1/auth/logout` | 撤销当前 refresh token |
 | `GET` | `/api/v1/grading/models` | 获取可用模型列表（含视觉能力标记） |
 | `POST` | `/api/v1/grading/ai-grade` | 纯文本提交批改 |
 | `POST` | `/api/v1/grading/ai-grade-multipart` | 文本 + 图片提交批改 |
@@ -722,11 +726,12 @@ ClawGrad--/
 
 ## 🧭 后续优化
 
-当前版本已经具备注册、登录、JWT 鉴权、用户隔离提交历史、Docker 编排和数据库持久化。后续生产化可以继续增强：
+当前版本已经具备注册、登录、JWT 鉴权、refresh token 轮换、统一错误响应、用户隔离提交历史、Docker 编排、Flyway 迁移和数据库持久化。后续生产化可以继续增强：
 
-- JWT 当前是后端 HMAC MVP 实现，没有刷新 token；生产环境应使用强随机 `JWT_SECRET_KEY`，并考虑刷新 token 或短时效访问 token。
-- JPA 当前仍使用 `spring.jpa.hibernate.ddl-auto=update`；正式部署建议引入 Flyway 或 Liquibase 管理数据库迁移。
-- 认证和业务错误响应较基础；后续可统一异常响应格式，便于前端展示和接口排查。
+- JWT 当前仍是后端 HMAC 实现；生产环境必须使用强随机 `JWT_SECRET_KEY`，并建议开启 `JWT_REQUIRE_STRONG_SECRET=true`。
+- Refresh token 已持久化并支持轮换/撤销；后续可增加设备列表、全部设备登出和异常登录审计。
+- Flyway 已接管主环境 schema，Hibernate 使用 `ddl-auto=validate`；后续结构变更应继续新增 migration，不再依赖自动改表。
+- 统一错误响应已覆盖常见认证、权限和校验错误；后续可进一步补充业务错误码字典。
 - 历史详情页已经能展示结果，但尚未与实时结果页抽取共用组件；后续可提取 `ResultViewer`，减少重复 UI。
 - 前端构建当前可能出现 Vite 大 chunk 警告；如需优化首屏加载，可按路由拆包或配置 `manualChunks`。
 

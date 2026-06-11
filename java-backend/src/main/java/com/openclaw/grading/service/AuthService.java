@@ -21,15 +21,18 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
+    private final RefreshTokenService refreshTokenService;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
                        AuthenticationManager authenticationManager,
-                       JwtService jwtService) {
+                       JwtService jwtService,
+                       RefreshTokenService refreshTokenService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
         this.jwtService = jwtService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     public AuthResponse register(RegisterRequest request) {
@@ -46,7 +49,7 @@ public class AuthService {
         user.setRole("STUDENT");
         user = userRepository.save(user);
 
-        return toResponse(UserPrincipal.from(user));
+        return toResponse(user);
     }
 
     public AuthResponse login(AuthRequest request) {
@@ -59,14 +62,27 @@ public class AuthService {
         }
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户名或密码错误"));
-        return toResponse(UserPrincipal.from(user));
+        return toResponse(user);
     }
 
-    private AuthResponse toResponse(UserPrincipal principal) {
+    public AuthResponse refresh(String refreshToken) {
+        User user = refreshTokenService.rotate(refreshToken);
+        return toResponse(user);
+    }
+
+    public void logout(String refreshToken) {
+        refreshTokenService.revoke(refreshToken);
+    }
+
+    private AuthResponse toResponse(User user) {
+        UserPrincipal principal = UserPrincipal.from(user);
         String token = jwtService.generateToken(principal);
+        String refreshToken = refreshTokenService.issueToken(user);
         return new AuthResponse(
                 token,
                 "Bearer",
+                refreshToken,
+                jwtService.getExpiresInSeconds(),
                 principal.getId(),
                 principal.getUsername(),
                 principal.getDisplayName(),

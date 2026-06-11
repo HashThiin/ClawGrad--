@@ -8,8 +8,18 @@ const api = axios.create({
   },
 })
 
+const authApi = axios.create({
+  baseURL: '/api/v1',
+  timeout: 60000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
 const AUTH_TOKEN_KEY = 'clawgrad_token'
+const AUTH_REFRESH_TOKEN_KEY = 'clawgrad_refresh_token'
 const AUTH_USER_KEY = 'clawgrad_user'
+let refreshPromise: Promise<string | null> | null = null
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem(AUTH_TOKEN_KEY)
@@ -22,10 +32,31 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config as any
+    const path = window.location.pathname
+    const requestUrl = originalRequest?.url || ''
+    const canRefresh =
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !requestUrl.includes('/auth/login') &&
+      !requestUrl.includes('/auth/register') &&
+      !requestUrl.includes('/auth/refresh') &&
+      !!localStorage.getItem(AUTH_REFRESH_TOKEN_KEY)
+
+    if (canRefresh) {
+      originalRequest._retry = true
+      const token = await refreshAccessToken()
+      if (token) {
+        originalRequest.headers = originalRequest.headers || {}
+        originalRequest.headers.Authorization = `Bearer ${token}`
+        return api(originalRequest)
+      }
+    }
+
     if (error.response?.status === 401) {
       clearAuth()
-      const path = window.location.pathname
       if (path !== '/login' && path !== '/register') {
         window.location.href = '/login'
       }
@@ -44,10 +75,13 @@ export interface AuthUser {
 export interface AuthResponse extends AuthUser {
   token: string
   tokenType: string
+  refreshToken: string
+  expiresInSeconds: number
 }
 
 export const setAuth = (auth: AuthResponse) => {
   localStorage.setItem(AUTH_TOKEN_KEY, auth.token)
+  localStorage.setItem(AUTH_REFRESH_TOKEN_KEY, auth.refreshToken)
   localStorage.setItem(
     AUTH_USER_KEY,
     JSON.stringify({
@@ -61,6 +95,7 @@ export const setAuth = (auth: AuthResponse) => {
 
 export const clearAuth = () => {
   localStorage.removeItem(AUTH_TOKEN_KEY)
+  localStorage.removeItem(AUTH_REFRESH_TOKEN_KEY)
   localStorage.removeItem(AUTH_USER_KEY)
 }
 
@@ -96,7 +131,38 @@ export const register = async (params: {
   return response.data
 }
 
-export const logout = () => clearAuth()
+export const logout = async () => {
+  const refreshToken = localStorage.getItem(AUTH_REFRESH_TOKEN_KEY)
+  clearAuth()
+  if (!refreshToken) return
+  try {
+    await authApi.post('/auth/logout', { refreshToken })
+  } catch {
+    // Local logout should not be blocked by a best-effort server revoke.
+  }
+}
+
+const refreshAccessToken = async (): Promise<string | null> => {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const refreshToken = localStorage.getItem(AUTH_REFRESH_TOKEN_KEY)
+      if (!refreshToken) return null
+      try {
+        const response = await authApi.post<AuthResponse>('/auth/refresh', {
+          refreshToken,
+        })
+        setAuth(response.data)
+        return response.data.token
+      } catch {
+        clearAuth()
+        return null
+      } finally {
+        refreshPromise = null
+      }
+    })()
+  }
+  return refreshPromise
+}
 
 export interface AIGradingRequest {
   question: string

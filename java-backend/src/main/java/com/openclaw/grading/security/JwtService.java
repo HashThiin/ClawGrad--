@@ -58,6 +58,10 @@ public class JwtService {
         return username != null && username.equals(user.getUsername());
     }
 
+    public long getExpiresInSeconds() {
+        return expiresMinutes * 60;
+    }
+
     private Map<String, Object> parseAndValidate(String token) {
         try {
             String[] parts = token.split("\\.");

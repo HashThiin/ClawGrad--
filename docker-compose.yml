@@ -55,6 +55,8 @@ services:
       - OPENCLAW_GATEWAY_MODEL=${OPENCLAW_GATEWAY_MODEL:-bailian-token-plan/qwen3.6-plus}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-clawgrad-local-development-secret-change-me}
       - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES:-720}
+      - JWT_REQUIRE_STRONG_SECRET=${JWT_REQUIRE_STRONG_SECRET:-false}
+      - REFRESH_TOKEN_EXPIRE_DAYS=${REFRESH_TOKEN_EXPIRE_DAYS:-14}
     depends_on:
       - mysql
       - redis
