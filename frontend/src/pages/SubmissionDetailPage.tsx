@@ -6,65 +6,19 @@ import {
   Card,
   Descriptions,
   Empty,
-  List,
   Space,
   Spin,
-  Statistic,
-  Steps,
   Tag,
   Typography,
 } from 'antd'
 import dayjs from 'dayjs'
 import {
   fetchSubmissionDetail,
-  type ItemGradingResult,
-  type StageProgress,
   type SubmissionDetail,
 } from '../services/api'
+import ResultViewer from '../components/ResultViewer'
 
-const { Title, Paragraph } = Typography
-
-const stageStatusToAntd = (
-  s?: string
-): 'wait' | 'process' | 'finish' | 'error' => {
-  if (s === 'completed') return 'finish'
-  if (s === 'running') return 'process'
-  if (s === 'failed') return 'error'
-  return 'wait'
-}
-
-const renderStages = (stages?: StageProgress[]) => (
-  <Steps
-    items={(stages || []).map((stage) => ({
-      title: stage.name,
-      status: stageStatusToAntd(stage.status),
-      description:
-        stage.duration != null ? `${(stage.duration / 1000).toFixed(2)}s` : stage.status,
-    }))}
-  />
-)
-
-const renderItems = (items: ItemGradingResult[]) => (
-  <List
-    bordered
-    dataSource={items}
-    renderItem={(item) => (
-      <List.Item>
-        <Space direction="vertical" style={{ width: '100%' }}>
-          <Space wrap>
-            <Tag color="blue">第 {item.index} 题</Tag>
-            <strong>
-              {item.score} / {item.maxScore}
-            </strong>
-            {item.correctness && <Tag>{item.correctness}</Tag>}
-          </Space>
-          {item.question && <Paragraph style={{ marginBottom: 0 }}>{item.question}</Paragraph>}
-          {item.feedback && <Alert type="info" message={item.feedback} />}
-        </Space>
-      </List.Item>
-    )}
-  />
-)
+const { Title } = Typography
 
 const SubmissionDetailPage = () => {
   const { taskId } = useParams()
@@ -94,9 +48,6 @@ const SubmissionDetailPage = () => {
       </div>
     )
   }
-
-  const result = detail.result
-  const items = result?.items || []
 
   return (
     <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
@@ -128,12 +79,6 @@ const SubmissionDetailPage = () => {
         </Descriptions>
       </Card>
 
-      {detail.stages && detail.stages.length > 0 && (
-        <Card title="批改流水线" style={{ marginBottom: 16 }}>
-          {renderStages(detail.stages)}
-        </Card>
-      )}
-
       {detail.status === 'FAILED' || detail.status === 'TIMEOUT' ? (
         <Alert
           type={detail.status === 'TIMEOUT' ? 'warning' : 'error'}
@@ -142,23 +87,14 @@ const SubmissionDetailPage = () => {
         />
       ) : null}
 
-      {result && (
-        <Card title="批改结果" style={{ marginBottom: 16 }}>
-          <Statistic
-            title="总分"
-            value={result.totalScore}
-            suffix={`/ ${result.maxScore}`}
-            valueStyle={{ color: '#3f8600' }}
-          />
-          {(result.overallSummary || result.feedback) && (
-            <Paragraph style={{ marginTop: 16, whiteSpace: 'pre-wrap' }}>
-              {result.overallSummary || result.feedback}
-            </Paragraph>
-          )}
-        </Card>
-      )}
-
-      {items.length > 0 && <Card title="逐题详情">{renderItems(items)}</Card>}
+      <ResultViewer
+        result={detail.result}
+        organized={detail.organizedHomework}
+        stages={detail.stages}
+        currentStage={detail.currentStage}
+        status={detail.status}
+        modelName={detail.modelName}
+      />
     </div>
   )
 }

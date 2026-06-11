@@ -732,7 +732,7 @@ ClawGrad--/
 - Refresh token 已持久化并支持轮换/撤销；后续可增加设备列表、全部设备登出和异常登录审计。
 - Flyway 已接管主环境 schema，Hibernate 使用 `ddl-auto=validate`；后续结构变更应继续新增 migration，不再依赖自动改表。
 - 统一错误响应已覆盖常见认证、权限和校验错误；后续可进一步补充业务错误码字典。
-- 历史详情页已经能展示结果，但尚未与实时结果页抽取共用组件；后续可提取 `ResultViewer`，减少重复 UI。
+- `ResultPage` 与 `SubmissionDetailPage` 已共用 `ResultViewer`；后续可继续做更细的视觉优化。
 - 前端构建当前可能出现 Vite 大 chunk 警告；如需优化首屏加载，可按路由拆包或配置 `manualChunks`。
 
 ---
