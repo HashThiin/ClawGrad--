@@ -41,12 +41,20 @@ services:
       - MYSQL_DATABASE=openclaw_grading
       - MYSQL_USERNAME=openclaw
       - MYSQL_PASSWORD=openclaw
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/openclaw_grading?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false
+      - SPRING_DATASOURCE_USERNAME=openclaw
+      - SPRING_DATASOURCE_PASSWORD=openclaw
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - RABBITMQ_HOST=rabbitmq
       - RABBITMQ_PORT=5672
       - RABBITMQ_USERNAME=guest
       - RABBITMQ_PASSWORD=guest
+      - OPENCLAW_GATEWAY_URL=${OPENCLAW_GATEWAY_URL:-http://47.122.119.189:18789}
+      - OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}
+      - OPENCLAW_GATEWAY_MODEL=${OPENCLAW_GATEWAY_MODEL:-bailian-token-plan/qwen3.6-plus}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-clawgrad-local-development-secret-change-me}
+      - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES:-720}
     depends_on:
       - mysql
       - redis

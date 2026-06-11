@@ -1,8 +1,10 @@
 package com.openclaw.grading.controller;
 
 import com.openclaw.grading.model.dto.AssignmentGradingRequest;
+import com.openclaw.grading.model.entity.User;
 import com.openclaw.grading.pipeline.GradingContext.ImageAttachment;
 import com.openclaw.grading.service.AssignmentGradingService;
+import com.openclaw.grading.service.CurrentUserService;
 import com.openclaw.grading.service.FileStorageService;
 import com.openclaw.grading.service.GradingTaskStore;
 import com.openclaw.grading.service.ModelCatalogService;
@@ -27,15 +29,18 @@ public class AssignmentGradingController {
     private final GradingTaskStore taskStore;
     private final FileStorageService fileStorageService;
     private final ModelCatalogService modelCatalog;
+    private final CurrentUserService currentUserService;
 
     public AssignmentGradingController(AssignmentGradingService gradingService,
                                         GradingTaskStore taskStore,
                                         FileStorageService fileStorageService,
-                                        ModelCatalogService modelCatalog) {
+                                        ModelCatalogService modelCatalog,
+                                        CurrentUserService currentUserService) {
         this.gradingService = gradingService;
         this.taskStore = taskStore;
         this.fileStorageService = fileStorageService;
         this.modelCatalog = modelCatalog;
+        this.currentUserService = currentUserService;
     }
 
     /**
@@ -60,7 +65,8 @@ public class AssignmentGradingController {
                 request.getAnswer() != null && !request.getAnswer().isBlank(),
                 request.getModelId());
 
-        String taskId = gradingService.submitGradingTask(request);
+        User user = currentUserService.requireCurrentUser();
+        String taskId = gradingService.submitGradingTask(request, user);
 
         return ResponseEntity.accepted().body(Map.of(
                 "taskId", taskId,
@@ -108,7 +114,8 @@ public class AssignmentGradingController {
             List<ImageAttachment> images = files == null
                     ? List.of()
                     : fileStorageService.saveImages(archiveId, files);
-            String taskId = gradingService.submitGradingTask(request, images);
+            User user = currentUserService.requireCurrentUser();
+            String taskId = gradingService.submitGradingTask(request, images, user);
 
             return ResponseEntity.accepted().body(Map.of(
                     "taskId", taskId,
@@ -137,7 +144,8 @@ public class AssignmentGradingController {
      */
     @GetMapping("/ai-tasks/{taskId}")
     public ResponseEntity<?> getAITaskResult(@PathVariable String taskId) {
-        GradingTaskStore.TaskStatus task = taskStore.getTask(taskId);
+        User user = currentUserService.requireCurrentUser();
+        GradingTaskStore.TaskStatus task = taskStore.getTask(taskId, user.getId());
 
         if (task == null) {
             return ResponseEntity.status(404).body(Map.of(
