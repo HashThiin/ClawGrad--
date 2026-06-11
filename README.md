@@ -502,26 +502,106 @@ AI 返回严格遵循 JSON Schema 的批改结果，包含：
 
 ### 前置条件
 
-- Docker & Docker Compose
-- 一个可用的 OpenClaw Gateway 实例
+- Docker Desktop 与 Docker Compose
+- Java 17+ 与 Maven（用于本地后端测试）
+- Node.js 18+ 与 npm（用于前端开发和构建）
+- 一个可用的 OpenClaw Gateway 实例和 token
 
-### 三步启动
+### 1. 准备 `.env`
 
-```bash
-# 1. 配置环境变量
-cp .env.example .env
-# 编辑 .env，填入 OpenClaw Gateway 地址和 Token
+根目录 `.env` 是本地运行配置文件，不要提交到 GitHub。首次运行先复制模板：
 
-# 2. 一键启动所有服务
-docker compose up -d
-# → MySQL + Redis + RabbitMQ + 后端
-
-# 3. 启动前端
-cd frontend && npm install && npm run dev
-# → http://localhost:5173
+```powershell
+Copy-Item .env.example .env
 ```
 
-后端默认监听 `http://localhost:8080/api/v1`
+至少确认以下变量已经配置：
+
+```env
+OPENCLAW_GATEWAY_URL=http://47.122.119.189:18789
+OPENCLAW_GATEWAY_TOKEN=replace-with-your-openclaw-token
+OPENCLAW_GATEWAY_MODEL=bailian-token-plan/qwen3.6-plus
+JWT_SECRET_KEY=replace-with-a-long-random-dev-secret
+JWT_EXPIRE_MINUTES=720
+```
+
+注意：
+
+- 真实 `OPENCLAW_GATEWAY_TOKEN` 只放在根目录 `.env`。
+- `java-backend/src/main/resources/application.yml` 只读取环境变量，不保存真实 token。
+- `.env`、`frontend/node_modules`、`frontend/dist`、`java-backend/target`、`java-backend/storage` 已被 `.gitignore` 忽略。
+
+### 2. Docker 优先启动
+
+先检查 compose 配置是否能正确解析 `.env`：
+
+```powershell
+docker compose config --quiet
+```
+
+启动基础设施：
+
+```powershell
+docker compose up -d mysql redis rabbitmq
+docker compose ps
+```
+
+启动后端容器：
+
+```powershell
+docker compose up -d java-backend
+docker compose logs -f java-backend
+```
+
+端口说明：
+
+- 后端容器内访问 MySQL：`mysql:3306`
+- 宿主机访问 MySQL：`localhost:3307`
+- 后端 API：`http://localhost:8080/api/v1`
+- Redis：`localhost:6379`
+- RabbitMQ AMQP：`localhost:5672`
+- RabbitMQ 管理台：`http://localhost:15672`
+
+### 3. 启动前端
+
+前端依赖和构建产物不提交，首次运行需要安装依赖：
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+前端默认访问 `http://localhost:5173`，接口经 Vite 代理转到后端 `/api/v1`。
+
+### 4. 开发验证命令
+
+```powershell
+# 后端单元测试
+cd java-backend
+mvn test
+
+# 前端生产构建
+cd ../frontend
+npm run build
+```
+
+`npm run build` 可能出现 Vite 大 chunk 警告，只要 TypeScript 和 Vite 构建成功即可。
+
+### 5. 端到端手动验收
+
+按 Docker 优先流程启动后，使用浏览器完成以下检查：
+
+1. 打开 `http://localhost:5173/register`，注册学生账号。
+2. 登录后进入 Dashboard。
+3. 打开批改页，提交一份文本题。
+4. 在结果页等待任务状态变为 `COMPLETED`。
+5. 打开 `/history`，确认历史列表出现刚才的提交记录。
+6. 点击记录进入 `/submissions/:taskId`，确认详情页能看到题目、状态、模型、分数和批改结果。
+7. 执行 `docker compose restart java-backend`。
+8. 后端重启完成后再次刷新 `/history` 和 `/submissions/:taskId`，确认历史记录和详情仍可查询。
+
+如果第 4 步失败，先检查 `.env` 中的 `OPENCLAW_GATEWAY_TOKEN` 是否有效，以及后端日志中是否存在网关连接或鉴权错误。真实 token 不要粘贴到 issue、README 或提交记录里。
 
 ---
 
@@ -531,31 +611,52 @@ cd frontend && npm install && npm run dev
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
+| `POST` | `/api/v1/auth/register` | 学生注册，成功后返回 JWT |
+| `POST` | `/api/v1/auth/login` | 学生登录，成功后返回 JWT |
 | `GET` | `/api/v1/grading/models` | 获取可用模型列表（含视觉能力标记） |
 | `POST` | `/api/v1/grading/ai-grade` | 纯文本提交批改 |
 | `POST` | `/api/v1/grading/ai-grade-multipart` | 文本 + 图片提交批改 |
 | `GET` | `/api/v1/grading/ai-tasks/{taskId}` | 轮询进度 & 获取结果 |
+| `GET` | `/api/v1/submissions` | 当前登录用户的提交历史 |
+| `GET` | `/api/v1/submissions/{taskId}` | 当前登录用户的提交详情 |
 | `POST` | `/api/v1/grading/code` | 编程作业同步批改 |
 
-### 30 秒体验
+除注册、登录接口外，其余学生侧接口都需要请求头：
 
-```bash
-# 提交一份数学作业
-curl -X POST http://localhost:8080/api/v1/grading/ai-grade \
-  -H "Content-Type: application/json" \
+```http
+Authorization: Bearer <JWT>
+```
+
+### curl 验证示例
+
+```powershell
+# 1. 注册或登录，保存返回的 token
+curl.exe -X POST http://localhost:8080/api/v1/auth/register `
+  -H "Content-Type: application/json" `
   -d '{
-    "subject": "数学",
-    "modelId": "bailian-token-plan/qwen3.6-plus",
-    "items": [{
-      "index": 1,
-      "question": "求 f(x) = x² + 2x 的导数",
-      "answer": "f'\''(x) = 2x + 2",
-      "maxScore": 10
-    }]
+    "username": "student01",
+    "password": "123456",
+    "displayName": "测试学生"
   }'
 
-# 返回 taskId，轮询结果
-curl http://localhost:8080/api/v1/grading/ai-tasks/{taskId}
+# 2. 携带 JWT 提交文本题
+curl.exe -X POST http://localhost:8080/api/v1/grading/ai-grade `
+  -H "Content-Type: application/json" `
+  -H "Authorization: Bearer <JWT>" `
+  -d '{
+    "question": "求 f(x) = x^2 + 2x 的导数",
+    "answer": "f''(x) = 2x + 2",
+    "maxScore": 10,
+    "modelId": "bailian-token-plan/qwen3.6-plus"
+  }'
+
+# 3. 用返回的 taskId 轮询结果
+curl.exe http://localhost:8080/api/v1/grading/ai-tasks/<taskId> `
+  -H "Authorization: Bearer <JWT>"
+
+# 4. 查看历史和详情
+curl.exe http://localhost:8080/api/v1/submissions `
+  -H "Authorization: Bearer <JWT>"
 ```
 
 ---
@@ -570,19 +671,25 @@ ClawGrad--/
 ├── frontend/                   # 🎨 React 18 + Vite + Ant Design
 │   └── src/
 │       ├── pages/
-│       │   ├── HomePage.tsx    # 首页 — 模型选择 & 功能导航
-│       │   ├── GradePage.tsx   # 批改页 — 上传 & 实时进度
-│       │   └── ResultPage.tsx  # 结果页 — 结构化展示 & 分析
-│       └── services/api.ts     # API 调用封装
+│       │   ├── LoginPage.tsx              # 登录页
+│       │   ├── RegisterPage.tsx           # 注册页
+│       │   ├── DashboardPage.tsx          # 学生工作台
+│       │   ├── GradePage.tsx              # 批改页 — 上传 & 实时进度
+│       │   ├── ResultPage.tsx             # 结果页 — 结构化展示 & 分析
+│       │   ├── HistoryPage.tsx            # 历史列表
+│       │   └── SubmissionDetailPage.tsx   # 历史详情
+│       └── services/api.ts                # API 调用封装 + JWT 拦截器
 │
 ├── java-backend/               # ⚙️ Spring Boot 3.2 + WebFlux
 │   └── src/main/java/.../grading/
 │       ├── OpenClawGradingApplication.java
-│       ├── controller/         # REST 入口
+│       ├── controller/         # REST 入口：认证、批改、提交历史
+│       ├── security/           # Spring Security + JWT
+│       ├── repository/         # User / Submission JPA Repository
 │       ├── service/
 │       │   ├── OpenClawClientService.java   # ★ OpenClaw Gateway 客户端
 │       │   ├── ModelCatalogService.java     #   模型目录服务
-│       │   └── GradingTaskStore.java        #   任务状态管理
+│       │   └── GradingTaskStore.java        #   MySQL 任务状态管理
 │       ├── pipeline/           # ★ 流水线核心
 │       │   ├── GradingPipeline.java         #   编排器
 │       │   ├── GradingContext.java          #   上下文
@@ -610,6 +717,18 @@ ClawGrad--/
 | 直连模型 vs Gateway | **OpenClaw Gateway** | 统一接口、模型切换零成本 |
 | 自由文本 vs JSON | **严格 JSON Schema** | 前端可直接渲染，无需二次解析 |
 | 不传 agent-id | **只传 Bearer Token** | 避免 OpenClaw 模型锁定 |
+
+---
+
+## 🧭 后续优化
+
+当前版本已经具备注册、登录、JWT 鉴权、用户隔离提交历史、Docker 编排和数据库持久化。后续生产化可以继续增强：
+
+- JWT 当前是后端 HMAC MVP 实现，没有刷新 token；生产环境应使用强随机 `JWT_SECRET_KEY`，并考虑刷新 token 或短时效访问 token。
+- JPA 当前仍使用 `spring.jpa.hibernate.ddl-auto=update`；正式部署建议引入 Flyway 或 Liquibase 管理数据库迁移。
+- 认证和业务错误响应较基础；后续可统一异常响应格式，便于前端展示和接口排查。
+- 历史详情页已经能展示结果，但尚未与实时结果页抽取共用组件；后续可提取 `ResultViewer`，减少重复 UI。
+- 前端构建当前可能出现 Vite 大 chunk 警告；如需优化首屏加载，可按路由拆包或配置 `manualChunks`。
 
 ---
 
