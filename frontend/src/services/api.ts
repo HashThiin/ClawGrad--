@@ -8,6 +8,162 @@ const api = axios.create({
   },
 })
 
+const authApi = axios.create({
+  baseURL: '/api/v1',
+  timeout: 60000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
+const AUTH_TOKEN_KEY = 'clawgrad_token'
+const AUTH_REFRESH_TOKEN_KEY = 'clawgrad_refresh_token'
+const AUTH_USER_KEY = 'clawgrad_user'
+let refreshPromise: Promise<string | null> | null = null
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem(AUTH_TOKEN_KEY)
+  if (token) {
+    config.headers = config.headers || {}
+    ;(config.headers as any).Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config as any
+    const path = window.location.pathname
+    const requestUrl = originalRequest?.url || ''
+    const canRefresh =
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !requestUrl.includes('/auth/login') &&
+      !requestUrl.includes('/auth/register') &&
+      !requestUrl.includes('/auth/refresh') &&
+      !!localStorage.getItem(AUTH_REFRESH_TOKEN_KEY)
+
+    if (canRefresh) {
+      originalRequest._retry = true
+      const token = await refreshAccessToken()
+      if (token) {
+        originalRequest.headers = originalRequest.headers || {}
+        originalRequest.headers.Authorization = `Bearer ${token}`
+        return api(originalRequest)
+      }
+    }
+
+    if (error.response?.status === 401) {
+      clearAuth()
+      if (path !== '/login' && path !== '/register') {
+        window.location.href = '/login'
+      }
+    }
+    return Promise.reject(error)
+  }
+)
+
+export interface AuthUser {
+  userId: number
+  username: string
+  displayName?: string
+  role: string
+}
+
+export interface AuthResponse extends AuthUser {
+  token: string
+  tokenType: string
+  refreshToken: string
+  expiresInSeconds: number
+}
+
+export const setAuth = (auth: AuthResponse) => {
+  localStorage.setItem(AUTH_TOKEN_KEY, auth.token)
+  localStorage.setItem(AUTH_REFRESH_TOKEN_KEY, auth.refreshToken)
+  localStorage.setItem(
+    AUTH_USER_KEY,
+    JSON.stringify({
+      userId: auth.userId,
+      username: auth.username,
+      displayName: auth.displayName,
+      role: auth.role,
+    })
+  )
+}
+
+export const clearAuth = () => {
+  localStorage.removeItem(AUTH_TOKEN_KEY)
+  localStorage.removeItem(AUTH_REFRESH_TOKEN_KEY)
+  localStorage.removeItem(AUTH_USER_KEY)
+}
+
+export const getCurrentUser = (): AuthUser | null => {
+  const raw = localStorage.getItem(AUTH_USER_KEY)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    clearAuth()
+    return null
+  }
+}
+
+export const isAuthenticated = () => !!localStorage.getItem(AUTH_TOKEN_KEY)
+
+export const login = async (params: {
+  username: string
+  password: string
+}): Promise<AuthResponse> => {
+  const response = await api.post('/auth/login', params)
+  setAuth(response.data)
+  return response.data
+}
+
+export const register = async (params: {
+  username: string
+  password: string
+  displayName?: string
+}): Promise<AuthResponse> => {
+  const response = await api.post('/auth/register', params)
+  setAuth(response.data)
+  return response.data
+}
+
+export const logout = async () => {
+  const refreshToken = localStorage.getItem(AUTH_REFRESH_TOKEN_KEY)
+  clearAuth()
+  if (!refreshToken) return
+  try {
+    await authApi.post('/auth/logout', { refreshToken })
+  } catch {
+    // Local logout should not be blocked by a best-effort server revoke.
+  }
+}
+
+const refreshAccessToken = async (): Promise<string | null> => {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      const refreshToken = localStorage.getItem(AUTH_REFRESH_TOKEN_KEY)
+      if (!refreshToken) return null
+      try {
+        const response = await authApi.post<AuthResponse>('/auth/refresh', {
+          refreshToken,
+        })
+        setAuth(response.data)
+        return response.data.token
+      } catch {
+        clearAuth()
+        return null
+      } finally {
+        refreshPromise = null
+      }
+    })()
+  }
+  return refreshPromise
+}
+
 export interface AIGradingRequest {
   question: string
   answer: string
@@ -84,6 +240,27 @@ export interface TaskResultResponse {
   suggestFastModel?: boolean
 }
 
+export interface SubmissionSummary {
+  taskId: string
+  status: string
+  questionPreview: string
+  modelId?: string
+  modelName?: string
+  totalScore?: number
+  maxScore?: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SubmissionDetail extends TaskResultResponse {
+  question?: string
+  answer?: string
+  totalScore?: number
+  maxScore?: number
+  createdAt?: string
+  updatedAt?: string
+}
+
 export interface ErrorPoint {
   location: string
   errorType: string
@@ -149,6 +326,18 @@ export const submitGradingTaskMultipart = async (params: {
 // 轮询查询AI批改任务结果
 export const pollTaskResult = async (taskId: string): Promise<any> => {
   const response = await api.get(`/grading/ai-tasks/${taskId}`)
+  return response.data
+}
+
+export const fetchSubmissions = async (): Promise<SubmissionSummary[]> => {
+  const response = await api.get('/submissions')
+  return response.data
+}
+
+export const fetchSubmissionDetail = async (
+  taskId: string
+): Promise<SubmissionDetail> => {
+  const response = await api.get(`/submissions/${taskId}`)
   return response.data
 }
 

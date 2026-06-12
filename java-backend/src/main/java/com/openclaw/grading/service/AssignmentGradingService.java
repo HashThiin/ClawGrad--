@@ -1,6 +1,7 @@
 package com.openclaw.grading.service;
 
 import com.openclaw.grading.model.dto.AssignmentGradingRequest;
+import com.openclaw.grading.model.entity.User;
 import com.openclaw.grading.pipeline.GradingContext;
 import com.openclaw.grading.pipeline.GradingContext.ImageAttachment;
 import com.openclaw.grading.pipeline.GradingPipeline;
@@ -35,13 +36,24 @@ public class AssignmentGradingService {
      * <p>立即返回 taskId，后台 pipeline 异步执行：upload → preparation → grading → feedback。
      */
     public String submitGradingTask(AssignmentGradingRequest request) {
-        return submitGradingTask(request, List.of());
+        return submitGradingTask(request, List.of(), null);
     }
 
     /**
      * 带图片附件的提交。
      */
     public String submitGradingTask(AssignmentGradingRequest request, List<ImageAttachment> images) {
+        return submitGradingTask(request, images, null);
+    }
+
+    public String submitGradingTask(AssignmentGradingRequest request, User user) {
+        return submitGradingTask(request, List.of(), user);
+    }
+
+    /**
+     * 带当前登录用户的提交入口，任务状态和历史记录会绑定到该用户。
+     */
+    public String submitGradingTask(AssignmentGradingRequest request, List<ImageAttachment> images, User user) {
         String taskId = UUID.randomUUID().toString();
         log.info("Submit grading task: taskId={}, model={}, images={}",
                 taskId, request.getModelId(), images == null ? 0 : images.size());
@@ -57,7 +69,7 @@ public class AssignmentGradingService {
             log.warn("Cannot resolve model '{}', use raw id as display name", modelId);
         }
 
-        taskStore.createTask(taskId, request.getQuestion(), request.getAnswer(), modelId, modelName);
+        taskStore.createTask(taskId, request.getQuestion(), request.getAnswer(), modelId, modelName, user);
 
         GradingContext ctx = new GradingContext();
         ctx.setTaskId(taskId);

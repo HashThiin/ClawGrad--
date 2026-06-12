@@ -1,163 +1,245 @@
 package com.openclaw.grading.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.openclaw.grading.model.dto.AssignmentGradingResult;
 import com.openclaw.grading.model.dto.OrganizedHomework;
+import com.openclaw.grading.model.entity.Submission;
+import com.openclaw.grading.model.entity.User;
+import com.openclaw.grading.repository.SubmissionRepository;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 批改任务状态存储（内存版）
- * 生产环境建议用Redis
+ * 批改任务状态存储。
+ * 当前实现落 MySQL，保留原来的 TaskStatus 读写接口供流水线和控制器复用。
  */
 @Component
 public class GradingTaskStore {
-    
-    private final Map<String, TaskStatus> taskStore = new ConcurrentHashMap<>();
-    
-    public void createTask(String taskId, String question, String answer, String modelId, String modelName) {
-        TaskStatus status = new TaskStatus();
-        status.setTaskId(taskId);
-        status.setQuestion(question);
-        status.setAnswer(answer);
-        status.setModelId(modelId);
-        status.setModelName(modelName);
-        status.setStatus("PROCESSING");
-        // 预初始化 4 阶段进度
-        List<StageProgress> stages = new ArrayList<>();
-        stages.add(new StageProgress("upload", "pending", null));
-        stages.add(new StageProgress("organize", "pending", null));
-        stages.add(new StageProgress("grading", "pending", null));
-        stages.add(new StageProgress("feedback", "pending", null));
-        status.setStages(stages);
-        taskStore.put(taskId, status);
+
+    private static final TypeReference<List<StageProgress>> STAGE_LIST_TYPE = new TypeReference<>() {};
+
+    private final SubmissionRepository submissionRepository;
+    private final ObjectMapper objectMapper;
+
+    public GradingTaskStore(SubmissionRepository submissionRepository, ObjectMapper objectMapper) {
+        this.submissionRepository = submissionRepository;
+        this.objectMapper = objectMapper;
     }
 
-    /** 阶段开始（进入 running） */
+    public void createTask(String taskId, String question, String answer, String modelId, String modelName) {
+        createTask(taskId, question, answer, modelId, modelName, null);
+    }
+
+    @Transactional
+    public void createTask(String taskId, String question, String answer, String modelId, String modelName, User user) {
+        Submission submission = new Submission();
+        submission.setTaskId(taskId);
+        submission.setUser(user);
+        submission.setQuestion(question);
+        submission.setAnswer(answer);
+        submission.setModelId(modelId);
+        submission.setModelName(modelName);
+        submission.setStatus("PROCESSING");
+        submission.setStagesJson(writeJson(initialStages()));
+        submissionRepository.save(submission);
+    }
+
+    @Transactional
     public void stageStart(String taskId, String stageName) {
-        TaskStatus status = taskStore.get(taskId);
-        if (status == null || status.getStages() == null) return;
-        status.setCurrentStage(stageName);
-        for (StageProgress sp : status.getStages()) {
+        Submission submission = findTask(taskId);
+        if (submission == null) return;
+        submission.setCurrentStage(stageName);
+        List<StageProgress> stages = readStages(submission);
+        for (StageProgress sp : stages) {
             if (sp.getName().equals(stageName)) {
                 sp.setStatus("running");
                 break;
             }
         }
+        submission.setStagesJson(writeJson(stages));
     }
 
-    /** 阶段成功完成 */
+    @Transactional
     public void stageDone(String taskId, String stageName, long durationMs) {
-        TaskStatus status = taskStore.get(taskId);
-        if (status == null || status.getStages() == null) return;
-        for (StageProgress sp : status.getStages()) {
-            if (sp.getName().equals(stageName)) {
-                sp.setStatus("completed");
-                sp.setDuration(durationMs);
-                break;
-            }
-        }
+        updateStage(taskId, stageName, "completed", durationMs);
     }
 
-    /** 阶段失败 */
+    @Transactional
     public void stageFailed(String taskId, String stageName, long durationMs) {
-        TaskStatus status = taskStore.get(taskId);
-        if (status == null || status.getStages() == null) return;
-        for (StageProgress sp : status.getStages()) {
+        updateStage(taskId, stageName, "failed", durationMs);
+    }
+
+    @Transactional
+    public void completeTask(String taskId, AssignmentGradingResult result) {
+        Submission submission = findTask(taskId);
+        if (submission != null) {
+            submission.setStatus("COMPLETED");
+            submission.setResultJson(writeJson(result));
+            submission.setTotalScore(result == null ? null : result.getTotalScore());
+            submission.setMaxScore(result == null ? null : result.getMaxScore());
+            submission.setError(null);
+        }
+    }
+
+    @Transactional
+    public void recordOrganized(String taskId, OrganizedHomework organized) {
+        Submission submission = findTask(taskId);
+        if (submission != null) {
+            submission.setOrganizedHomeworkJson(writeJson(organized));
+        }
+    }
+
+    @Transactional
+    public void failTask(String taskId, String error) {
+        Submission submission = findTask(taskId);
+        if (submission != null) {
+            submission.setStatus("FAILED");
+            submission.setError(error);
+        }
+    }
+
+    @Transactional
+    public void timeoutTask(String taskId, String error, boolean suggestFastModel) {
+        Submission submission = findTask(taskId);
+        if (submission != null) {
+            submission.setStatus("TIMEOUT");
+            submission.setError(error);
+            submission.setSuggestFastModel(suggestFastModel);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public TaskStatus getTask(String taskId) {
+        return submissionRepository.findByTaskId(taskId)
+                .map(this::toTaskStatus)
+                .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
+    public TaskStatus getTask(String taskId, Long userId) {
+        return submissionRepository.findByTaskIdAndUserId(taskId, userId)
+                .map(this::toTaskStatus)
+                .orElse(null);
+    }
+
+    private void updateStage(String taskId, String stageName, String status, long durationMs) {
+        Submission submission = findTask(taskId);
+        if (submission == null) return;
+        List<StageProgress> stages = readStages(submission);
+        for (StageProgress sp : stages) {
             if (sp.getName().equals(stageName)) {
-                sp.setStatus("failed");
+                sp.setStatus(status);
                 sp.setDuration(durationMs);
                 break;
             }
         }
+        submission.setStagesJson(writeJson(stages));
     }
-    
-    public void completeTask(String taskId, AssignmentGradingResult result) {
-        TaskStatus status = taskStore.get(taskId);
-        if (status != null) {
-            status.setStatus("COMPLETED");
-            status.setResult(result);
+
+    private Submission findTask(String taskId) {
+        return submissionRepository.findByTaskId(taskId).orElse(null);
+    }
+
+    private List<StageProgress> initialStages() {
+        List<StageProgress> stages = new ArrayList<>();
+        stages.add(new StageProgress("upload", "pending", null));
+        stages.add(new StageProgress("organize", "pending", null));
+        stages.add(new StageProgress("grading", "pending", null));
+        stages.add(new StageProgress("feedback", "pending", null));
+        return stages;
+    }
+
+    private List<StageProgress> readStages(Submission submission) {
+        if (submission.getStagesJson() == null || submission.getStagesJson().isBlank()) {
+            return initialStages();
+        }
+        try {
+            return objectMapper.readValue(submission.getStagesJson(), STAGE_LIST_TYPE);
+        } catch (Exception e) {
+            return initialStages();
         }
     }
 
-    /** 记录 Organize 阶段产物，供查询接口返回。 */
-    public void recordOrganized(String taskId, OrganizedHomework organized) {
-        TaskStatus status = taskStore.get(taskId);
-        if (status != null) {
-            status.setOrganizedHomework(organized);
-        }
+    private TaskStatus toTaskStatus(Submission submission) {
+        TaskStatus status = new TaskStatus();
+        status.setTaskId(submission.getTaskId());
+        status.setQuestion(submission.getQuestion());
+        status.setAnswer(submission.getAnswer());
+        status.setStatus(submission.getStatus());
+        status.setOrganizedHomework(readJson(submission.getOrganizedHomeworkJson(), OrganizedHomework.class));
+        status.setResult(readJson(submission.getResultJson(), AssignmentGradingResult.class));
+        status.setError(submission.getError());
+        status.setStages(readStages(submission));
+        status.setCurrentStage(submission.getCurrentStage());
+        status.setSuggestFastModel(submission.isSuggestFastModel());
+        status.setModelId(submission.getModelId());
+        status.setModelName(submission.getModelName());
+        return status;
     }
-    
-    public void failTask(String taskId, String error) {
-        TaskStatus status = taskStore.get(taskId);
-        if (status != null) {
-            status.setStatus("FAILED");
-            status.setError(error);
+
+    private String writeJson(Object value) {
+        if (value == null) return null;
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            throw new IllegalStateException("任务状态序列化失败", e);
         }
     }
 
-    /** 任务超时（非失败，提供重试选项） */
-    public void timeoutTask(String taskId, String error, boolean suggestFastModel) {
-        TaskStatus status = taskStore.get(taskId);
-        if (status != null) {
-            status.setStatus("TIMEOUT");
-            status.setError(error);
-            status.setSuggestFastModel(suggestFastModel);
+    private <T> T readJson(String json, Class<T> type) {
+        if (json == null || json.isBlank()) return null;
+        try {
+            return objectMapper.readValue(json, type);
+        } catch (Exception e) {
+            return null;
         }
     }
-    
-    public TaskStatus getTask(String taskId) {
-        return taskStore.get(taskId);
-    }
-    
+
     public static class TaskStatus {
         private String taskId;
         private String question;
         private String answer;
-        private String status;  // PROCESSING, COMPLETED, FAILED, TIMEOUT
+        private String status;
         private AssignmentGradingResult result;
         private OrganizedHomework organizedHomework;
         private String error;
         private List<StageProgress> stages;
         private String currentStage;
-        /** 超时时建议切换快速模型 */
         private boolean suggestFastModel;
-        /** 使用的模型ID */
         private String modelId;
-        /** 使用的模型展示名 */
         private String modelName;
-        
-        // Getters and Setters
+
         public String getTaskId() { return taskId; }
         public void setTaskId(String taskId) { this.taskId = taskId; }
-        
+
         public String getQuestion() { return question; }
         public void setQuestion(String question) { this.question = question; }
-        
+
         public String getAnswer() { return answer; }
         public void setAnswer(String answer) { this.answer = answer; }
-        
+
         public String getStatus() { return status; }
         public void setStatus(String status) { this.status = status; }
-        
+
         public AssignmentGradingResult getResult() { return result; }
         public void setResult(AssignmentGradingResult result) { this.result = result; }
-        
+
         public OrganizedHomework getOrganizedHomework() { return organizedHomework; }
         public void setOrganizedHomework(OrganizedHomework organizedHomework) { this.organizedHomework = organizedHomework; }
-        
+
         public String getError() { return error; }
         public void setError(String error) { this.error = error; }
-        
+
         public List<StageProgress> getStages() { return stages; }
         public void setStages(List<StageProgress> stages) { this.stages = stages; }
-        
+
         public String getCurrentStage() { return currentStage; }
         public void setCurrentStage(String currentStage) { this.currentStage = currentStage; }
-        
+
         public boolean isSuggestFastModel() { return suggestFastModel; }
         public void setSuggestFastModel(boolean suggestFastModel) { this.suggestFastModel = suggestFastModel; }
 
@@ -168,20 +250,19 @@ public class GradingTaskStore {
         public void setModelName(String modelName) { this.modelName = modelName; }
     }
 
-    /** 单个阶段的进度 */
     public static class StageProgress {
         private String name;
-        /** pending / running / completed / failed */
         private String status;
-        /** 耗时，单位 ms，完成后才有值 */
         private Long duration;
 
         public StageProgress() {}
+
         public StageProgress(String name, String status, Long duration) {
             this.name = name;
             this.status = status;
             this.duration = duration;
         }
+
         public String getName() { return name; }
         public void setName(String name) { this.name = name; }
         public String getStatus() { return status; }

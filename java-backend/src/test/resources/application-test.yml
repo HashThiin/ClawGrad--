@@ -1,0 +1,29 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:clawgrad;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: false
+
+openclaw:
+  gateway:
+    enabled: false
+    token: test-token
+
+app:
+  security:
+    jwt:
+      secret: test-secret-with-enough-length-for-hmac-signing
+      expires-minutes: 60
+      require-strong-secret: false
+    refresh-token:
+      expires-days: 14
